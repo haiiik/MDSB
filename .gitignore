@@ -27,3 +27,5 @@ docs/功能亮点.md
 # 本机专用：写死绝对路径的桌面自动化脚本，不进公开仓库
 frontend/scripts/
 samples/审批时效 样本.md
+frontend/test-results/
+frontend/playwright-report/
