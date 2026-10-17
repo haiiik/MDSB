@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="screenshots/logo.svg" width="88" alt="MDStar logo">
+  <img src="docs/screenshots/logo.svg" width="88" alt="MDStar logo">
   <h1 align="center">MDStar</h1>
   <p align="center"><b>Markdown Star Browser</b> —— Windows 桌面 Markdown 阅读器 / 编辑器</p>
 </p>
@@ -10,11 +10,11 @@
 
 | 阅读模式 | 编辑模式 | Mermaid 渲染 | 表格与代码块 |
 | --- | --- | --- | --- |
-| ![阅读模式](screenshots/01-read.png) | ![编辑模式](screenshots/02-edit.png) | ![Mermaid](screenshots/03-mermaid.png) | ![表格与代码块](screenshots/04-table-code.png) |
+| ![阅读模式](docs/screenshots/01-read.png) | ![编辑模式](docs/screenshots/02-edit.png) | ![Mermaid](docs/screenshots/03-mermaid.png) | ![表格与代码块](docs/screenshots/04-table-code.png) |
 
 **深浅两档主题**（点标签栏齿轮右侧那颗日/月开关）：
 
-![深浅主题切换](screenshots/theme-toggle.gif)
+![深浅主题切换](docs/screenshots/theme-toggle.gif)
 
 ## 功能清单
 
