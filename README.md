@@ -4,6 +4,8 @@
   <p align="center"><b>Markdown Star Browser</b> —— Windows 桌面 Markdown 阅读器 / 编辑器</p>
 </p>
 
+<p align="center">English documentation: <a href="README.en.md">README.en.md</a></p>
+
 从 0 自研内核，本地运行不联网。
 
 ## 截图
