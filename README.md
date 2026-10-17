@@ -4,7 +4,7 @@
   <p align="center"><b>Markdown Star Browser</b> —— Windows 桌面 Markdown 阅读器 / 编辑器</p>
 </p>
 
-从 0 自研内核（未使用 Markdown 编辑器组件库），本地运行不联网，单文件 exe。
+从 0 自研内核，本地运行不联网。
 
 ## 截图
 
