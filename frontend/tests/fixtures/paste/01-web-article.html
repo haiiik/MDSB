@@ -1,0 +1,16 @@
+<h2 id="t1" class="title" style="color:#c00;font-size:20px">审批时效看板</h2>
+<p style="line-height:1.8">本周对齐了<span class="hl">口径</span>：<strong>慢单</strong>以 <em>P90</em> 计，
+字段写 <code>avg_hours</code>，删除线 <s>旧口径</s> 作废，详见
+<a href="https://gongji.test/prd" title="PRD">需求文档</a>。</p>
+<ul>
+  <li>数据侧：补齐 <code>matter_type</code>
+    <ul><li>二级：按部门拆</li><li>二级：按月份拆</li></ul>
+  </li>
+  <li>前端侧：看板改版</li>
+</ul>
+<ol start="3"><li>第三步</li><li>第四步</li></ol>
+<blockquote><p>评审结论：先上线再优化。</p><ul><li>遗留：导出</li></ul></blockquote>
+<pre><code class="language-sql">SELECT matter_type, AVG(diff) AS avg_hours
+FROM approval_duration;</code></pre>
+<hr>
+<p>示意图 <img src="https://img.test/arch.png" alt="架构图" width="640" height="360"> 收尾。</p>

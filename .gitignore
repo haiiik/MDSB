@@ -1,0 +1,29 @@
+# 构建产物与依赖
+node_modules/
+frontend/dist/
+frontend/node_modules/
+build/bin/
+build/dist/
+*.syso
+*.exe
+coverage/
+tmp/
+
+# 内部工作区：工单历史、完成记录、验收截图（含本机路径与真实文档名）
+.scratch/
+docs/specs/
+docs/测试与验收.md
+docs/待确认口径.md
+docs/开发说明.md
+docs/README.github.md
+docs/功能亮点.md
+
+# 工具与本地状态
+.qoder/
+.vscode/
+*.log
+.DS_Store
+
+# 本机专用：写死绝对路径的桌面自动化脚本，不进公开仓库
+frontend/scripts/
+samples/审批时效 样本.md

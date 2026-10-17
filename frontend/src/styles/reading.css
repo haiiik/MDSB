@@ -1,0 +1,743 @@
+/*
+ * 阅读模式排版。作用域全部收在 .hp-doc 里，避免污染外壳组件。
+ *
+ * 宽度档位与缩放在这里已经可用，但真正切换它们的 UI 分别是 018 / 019；
+ * 003 只要保证 `render()` 产出的 DOM 挂上后排版正确。
+ */
+
+.hp-doc {
+  --hp-font-base: 15px;
+  --hp-line: 1.75;
+  --hp-fg: var(--hp-text);
+  --hp-fg-weak: var(--hp-text-weak);
+  --hp-rule: var(--hp-border);
+  --hp-quote-bar: var(--hp-accent);
+
+  max-width: var(--hp-measure, 900px);
+  margin: 0 auto;
+  padding: 28px 32px 96px;
+  /* 缩放由外层 CSS `zoom` 统一作用（025 的结论），这里不再自己乘倍率 */
+  font-size: var(--hp-font-base);
+  line-height: var(--hp-line);
+  color: var(--hp-fg);
+  overflow-wrap: break-word;
+}
+
+/*
+ * 正文宽度四档（D17 / 019）：760 / 900 / 1100 / 全宽，默认 900。
+ * 用容器宽度而不是视口，侧栏折叠时不会突变（只是可用宽度变大）。
+ */
+.hp-doc[data-width="narrow"] { --hp-measure: 760px; }
+.hp-doc[data-width="normal"] { --hp-measure: 900px; }
+.hp-doc[data-width="wide"]   { --hp-measure: 1100px; }
+.hp-doc[data-width="full"]   { --hp-measure: none; }
+
+.hp-doc > *:first-child {
+  margin-top: 0;
+}
+
+.hp-doc h1,
+.hp-doc h2,
+.hp-doc h3,
+.hp-doc h4,
+.hp-doc h5,
+.hp-doc h6 {
+  margin: 1.6em 0 0.6em;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.hp-doc h1 {
+  font-size: 1.9em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--hp-rule);
+}
+
+.hp-doc h2 {
+  font-size: 1.5em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--hp-rule);
+}
+
+.hp-doc h3 { font-size: 1.25em; }
+.hp-doc h4 { font-size: 1.1em; }
+.hp-doc h5,
+.hp-doc h6 { font-size: 1em; color: var(--hp-fg-weak); }
+
+.hp-doc p {
+  margin: 0 0 1em;
+}
+
+.hp-doc a {
+  color: var(--hp-accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--hp-border);
+}
+
+.hp-doc a:hover {
+  border-bottom-color: var(--hp-accent);
+}
+
+.hp-doc ul,
+.hp-doc ol {
+  margin: 0 0 1em;
+  padding-left: 1.75em;
+}
+
+.hp-doc li {
+  margin: 0.25em 0;
+}
+
+.hp-doc li > ul,
+.hp-doc li > ol {
+  margin: 0.25em 0;
+}
+
+/* 任务清单：去掉项目符号，方框与首行文字基线对齐 */
+.hp-doc li.task-list-item {
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.hp-doc input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: var(--hp-accent);
+}
+
+.hp-doc blockquote {
+  margin: 0 0 1em;
+  padding: 0.15em 1em;
+  border-left: 3px solid var(--hp-quote-bar);
+  background: var(--hp-quote-bg);
+  color: var(--hp-fg-weak);
+}
+
+.hp-doc blockquote > *:last-child {
+  margin-bottom: 0;
+}
+
+.hp-doc hr {
+  height: 1px;
+  margin: 2em 0;
+  border: 0;
+  background: var(--hp-rule);
+}
+
+.hp-doc code {
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+  background: var(--hp-code-bg);
+  font-family: var(--hp-font-md);
+  font-size: 0.9em;
+}
+
+.hp-doc pre {
+  margin: 0 0 1em;
+  padding: 14px 16px;
+  border: 1px solid var(--hp-rule);
+  border-radius: 6px;
+  background: var(--hp-code-bg);
+  overflow: auto;
+}
+
+.hp-doc pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 0.88em;
+  line-height: 1.6;
+}
+
+.hp-doc img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+/*
+ * 表格：定宽 + 横向滚动。PRD 里 12 列宽表很常见，
+ * 压缩列宽会让中文换行成竖条，宁可让表头撑开容器再滚动（D18）。
+ */
+.hp-doc table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 0 1em;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.hp-doc th,
+.hp-doc td {
+  padding: 6px 12px;
+  border: 1px solid var(--hp-rule);
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.hp-doc th {
+  background: var(--hp-selected);
+  font-weight: 600;
+}
+
+.hp-doc tbody tr:nth-child(even) td {
+  background: var(--hp-quote-bg);
+}
+
+/* 脚注 */
+.hp-doc .footnotes {
+  margin-top: 2.5em;
+  padding-top: 1em;
+  border-top: 1px solid var(--hp-rule);
+  font-size: 0.92em;
+  color: var(--hp-fg-weak);
+}
+
+/* 图片加载失败占位（021 接入实际处理，先保证不撑破布局） */
+.hp-doc img[data-broken="true"] {
+  min-width: 120px;
+  min-height: 32px;
+  border: 1px dashed var(--hp-rule);
+}
+
+/* Mermaid：图本身按内容宽度显示，超宽时横向滚动而不是压扁 */
+.hp-doc .hp-mermaid {
+  margin: 0 0 1em;
+  padding: 12px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+/*
+ * 上面那句注释原先是**说到没做到**：这里写的是 `max-width: 100%`，
+ * mermaid 默认又给 svg 宽度写 100%，两边合起来就是「宽图整篇压扁到容器宽」
+ * （探针实测 viewBox 1482 只画 836，缩放比 0.56，中文小字糊成一团）。
+ * 现在按注释的本意来：真实尺寸画、`margin: auto` 居中、超宽由父容器横向滚动。
+ * （`display:block` + `margin:auto` 而不是 `text-align:center`：
+ *  行内元素在滚动容器里居中，内容比容器宽时左边会被裁掉一半，这是老坑。）
+ */
+.hp-doc .hp-mermaid svg {
+  display: block;
+  width: auto;
+  max-width: none;
+  height: auto;
+  margin: 0 auto;
+  /* 标签万一还是比盒子宽，宁可露在外面也不许切掉笔画 */
+  overflow: visible;
+}
+
+/*
+ * 长中文标签折行：mermaid 按 `flowchart.wrappingWidth` 算好了折行与盒子高度，
+ * 却把标签元素写成 `white-space: nowrap`（探针实测），于是中文一行冲出去被
+ * foreignObject 裁掉 —— 她截图里「二级单位会签：设备管理主管…」就是这么断的。
+ * 这里把换行放开，并允许在汉字间断行（中文没有空格，只按词换行等于不换行）。
+ */
+.hp-doc .hp-mermaid svg foreignObject > div,
+.hp-doc .hp-mermaid svg .nodeLabel,
+.hp-doc .hp-mermaid svg .edgeLabel p,
+.hp-doc .hp-mermaid svg foreignObject div p {
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.hp-doc .hp-mermaid svg foreignObject {
+  overflow: visible;
+}
+
+.hp-doc .hp-mermaid[data-state="pending"] {
+  min-height: 64px;
+  border: 1px dashed var(--hp-rule);
+  border-radius: 6px;
+}
+
+.hp-doc .hp-mermaid--error {
+  position: relative;
+  padding: 12px 14px;
+  border: 1px solid var(--hp-error-border);
+  border-left: 3px solid var(--hp-error);
+  border-radius: 6px;
+  background: var(--hp-error-bg);
+  text-align: left;
+}
+
+/* 错误块是普通块级流，叉用绝对定位贴右上角（坏图那条是 flex，靠 margin-left:auto 就够） */
+.hp-doc .hp-mermaid--error > .hp-dismiss,
+.hp-doc .hp-mermaidbox__error > .hp-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  margin-left: 0;
+}
+
+.hp-doc .hp-mermaidbox__error {
+  position: relative;
+}
+
+.hp-doc .hp-mermaid__error-title {
+  margin: 0 0 8px;
+  color: var(--hp-error);
+  font-size: 0.92em;
+}
+
+.hp-doc .hp-mermaid__error-msg {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--hp-error-bg);
+  color: var(--hp-error);
+  font-family: var(--hp-font-md);
+  font-size: 0.82em;
+  white-space: pre-wrap;
+}
+
+/* ---- 020 代码块工具条 ---- */
+.hp-doc .hp-code {
+  margin: 0 0 1em;
+  border: 1px solid var(--hp-rule);
+  border-radius: 6px;
+  background: var(--hp-code-bg);
+  overflow: hidden;
+}
+
+.hp-doc .hp-code pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.hp-doc .hp-code__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--hp-rule);
+  background: var(--hp-quote-bg);
+  font-size: 11px;
+}
+
+.hp-doc .hp-code__lang {
+  color: var(--hp-fg-weak);
+  font-family: var(--hp-font-md);
+  letter-spacing: 0.3px;
+}
+
+.hp-doc .hp-code__ops {
+  display: flex;
+  gap: 6px;
+}
+
+.hp-doc .hp-code__ops button {
+  padding: 1px 8px;
+  border: 1px solid var(--hp-rule);
+  border-radius: 3px;
+  background: var(--hp-surface);
+  color: var(--hp-fg-weak);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.hp-doc .hp-code__ops button:hover {
+  color: var(--hp-accent);
+  border-color: var(--hp-accent);
+}
+
+/* 折叠：只露前 20 行，其余靠展开按钮 */
+.hp-doc .hp-code.is-folded pre {
+  max-height: calc(20 * 1.6em + 28px);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 78%, transparent);
+}
+
+/* 行号：CSS 计数器，不往 DOM 里插节点，复制时不会带进行号 */
+.hp-doc pre.hp-code--numbered {
+  counter-reset: hpline;
+}
+
+.hp-doc pre.hp-code--numbered code {
+  display: block;
+}
+
+/* ---- 021 图片失效占位 ---- */
+.hp-doc .hp-img {
+  cursor: zoom-in;
+}
+
+.hp-doc .hp-img-broken {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px dashed var(--hp-rule);
+  border-radius: 6px;
+  background: var(--hp-quote-bg);
+  font-size: 12px;
+  color: var(--hp-fg-weak);
+}
+
+.hp-doc .hp-img-broken__path {
+  padding: 0;
+  background: none;
+  font-family: var(--hp-font-md);
+  overflow-wrap: anywhere;
+}
+
+.hp-doc .hp-img-broken__copy {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border: 1px solid var(--hp-rule);
+  border-radius: 3px;
+  background: var(--hp-surface);
+  color: var(--hp-fg-weak);
+  cursor: pointer;
+}
+
+/*
+ * 127：错误提示右侧的关闭叉（坏图占位、Mermaid 错误块都用它）。
+ * 定位靠 `margin-left:auto` —— 提示条是 flex 行，叉自然贴到最右边。
+ * 不套 `.hp-doc`：编辑模式的原地预览错误块也在 .hp-doc 里，但底栏/正文提示条不在，
+ * 一处规则三处用，别按容器分叉。
+ */
+.hp-dismiss {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.hp-dismiss:hover {
+  border-color: var(--hp-rule);
+  background: var(--hp-hover);
+}
+
+/* 坏图占位卡是**列**方向 flex，margin-left:auto 在那里不吃空间，得用 align-self */
+.hp-doc .hp-img-broken > .hp-dismiss {
+  align-self: flex-end;
+}
+
+/* ---- 022 [TOC] ---- */
+.hp-doc .hp-toc {
+  margin: 0 0 1.4em;
+  padding: 10px 14px;
+  border: 1px solid var(--hp-rule);
+  border-left: 3px solid var(--hp-quote-bar);
+  border-radius: 4px;
+  background: var(--hp-quote-bg);
+}
+
+.hp-doc .hp-toc__title {
+  margin-bottom: 6px;
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.hp-doc .hp-toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hp-doc .hp-toc li[data-level="h2"] { padding-left: 1.1em; }
+.hp-doc .hp-toc li[data-level="h3"] { padding-left: 2.2em; }
+.hp-doc .hp-toc li[data-level="h4"] { padding-left: 3.3em; }
+.hp-doc .hp-toc li[data-level="h5"] { padding-left: 4.4em; }
+.hp-doc .hp-toc li[data-level="h6"] { padding-left: 5.5em; }
+
+.hp-doc .hp-toc a {
+  border-bottom: 0;
+}
+
+/* ---- 021 灯箱 ---- */
+.hp-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(12, 14, 18, 0.86);
+  overflow: hidden;
+}
+
+.hp-lightbox img,
+/* 127：灯箱不再只装图片，Mermaid 的 SVG 克隆也走这条（`.hp-lightbox__stage`） */
+.hp-lightbox .hp-lightbox__stage {
+  position: relative;
+  z-index: 1;
+  max-width: 92vw;
+  max-height: 82vh;
+  transform-origin: center center;
+  cursor: grab;
+  user-select: none;
+}
+
+.hp-lightbox__hint {
+  color: #9aa3ad;
+}
+
+.hp-lightbox__bar {
+  /*
+   * 127：**钉在屏幕下沿**，不跟画布排在同一条 flex 列里。
+   * 原来是画布在上、工具栏在下 —— 可灯箱本来就是为了看大图，画布一大，
+   * 工具栏就被顶到屏幕中间、横压在图身上（截图里那行「Mermaid 图 · 滚轮缩放」正盖在节点上）。
+   * 绝对定位到底部后，图再怎么放大平移都挤不走出口。
+   * `z-index: 2` 仍要留着：`transform` 不改布局，同层的东西会被画布盖住、点不动。
+   */
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(12, 14, 18, 0.72);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #dfe3e8;
+  font-size: 12px;
+}
+
+.hp-lightbox__bar button {
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+ * 编辑模式（M2）：围栏代码块的 NodeView
+ * 109 只做了结构，样式一度是缺的 —— 语言下拉以裸元素渲染。这里补上。
+ * ------------------------------------------------------------------------- */
+
+.hp-doc .hp-codebox {
+  position: relative;
+  margin: 0 0 1em;
+  border: 1px solid var(--hp-border);
+  border-radius: 6px;
+  background: var(--hp-surface);
+}
+
+.hp-doc .hp-codebox.is-selected {
+  outline: 2px solid var(--hp-accent);
+  outline-offset: -1px;
+}
+
+/* 编辑模式：去掉 contenteditable 的浏览器默认焦点框。
+ * 它是 2px 纯黑描边，会套在**整篇文档**外面（`.hp-edit` 上那句 `outline:none`
+ * 管不到内层的 `.ProseMirror`），看着像文档被框选，且与主题色无关、深色档下更刺眼。
+ * 编辑器本身占满面板，焦点状态由光标与工具条表达，不需要这圈。 */
+.hp-doc .ProseMirror:focus,
+.hp-doc .ProseMirror:focus-visible {
+  outline: none;
+}
+
+.hp-doc .hp-codebox__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--hp-border);
+  user-select: none;
+}
+
+.hp-doc .hp-codebox__lang {
+  padding: 2px 4px;
+  border: 1px solid var(--hp-border);
+  border-radius: 4px;
+  background: var(--hp-bg);
+  color: var(--hp-text);
+  font-family: var(--hp-font-md);
+  font-size: 0.8em;
+}
+
+.hp-doc .hp-codebox__hint {
+  color: var(--hp-text-weak);
+  font-size: 0.78em;
+}
+
+/* 代码块本体：去掉 NodeView 外框后的重复边距 */
+.hp-doc .hp-codebox > pre {
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow-x: auto;
+}
+
+/* 110：Mermaid 原地预览 + 源码同屏，改一行即重绘 */
+.hp-doc .hp-mermaidbox {
+  /* 127：SVG 文字的覆盖输入框按 rect 差值定位，坐标系要有 */
+  position: relative;
+  padding: 10px 12px 0;
+  border-bottom: 1px dashed var(--hp-border);
+  text-align: center;
+}
+
+/*
+ * 127：双击 SVG `<text>`（sequence / pie / gantt / timeline）时盖在字上面的输入框。
+ * 定位与尺寸由脚本按 rect 写进行内样式，这里只管外观。
+ */
+.hp-doc .hp-mermaid-edit {
+  position: absolute;
+  z-index: 3;
+  padding: 0 6px;
+  border: 1px solid var(--hp-accent);
+  border-radius: 4px;
+  background: var(--hp-bg);
+  color: var(--hp-text);
+  font-family: var(--hp-font-md);
+  text-align: center;
+  box-shadow: 0 2px 8px var(--hp-shadow);
+}
+
+.hp-doc .hp-mermaidbox__hint {
+  margin: 0 0 6px;
+  color: var(--hp-text-weak);
+  font-size: 0.78em;
+  text-align: left;
+}
+
+.hp-doc .hp-mermaidbox[data-state="pending"] .hp-mermaidbox__svg {
+  min-height: 48px;
+  border: 1px dashed var(--hp-rule);
+  border-radius: 6px;
+}
+
+.hp-doc .hp-mermaidbox__svg {
+  overflow-x: auto;
+}
+
+.hp-doc .hp-mermaidbox__svg svg {
+  /* 与阅读模式同一口径（见上面 `.hp-mermaid svg` 那段）：真实尺寸 + 横向滚动，不压扁 */
+  display: block;
+  width: auto;
+  max-width: none;
+  height: auto;
+  margin: 0 auto;
+  overflow: visible;
+}
+
+/* 编辑模式原地预览里的长中文标签同样要能折行 */
+.hp-doc .hp-mermaidbox__svg foreignObject > div,
+.hp-doc .hp-mermaidbox__svg .nodeLabel,
+.hp-doc .hp-mermaidbox__svg .edgeLabel p,
+.hp-doc .hp-mermaidbox__svg foreignObject div p {
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.hp-doc .hp-mermaidbox__svg foreignObject {
+  overflow: visible;
+}
+
+/*
+ * 125：双击改字的两条视觉口径。
+ * ① 能改的文字要有「可改」的样子（虚线框 + 文本光标），不然没人知道图上的字能直接改；
+ * ② 正在编辑时 foreignObject 不许裁字 —— 编辑态的文字会变长，
+ *    被裁一半会让人以为「我打的字不见了」（和 124 那条「显示不全」是同一类问题）。
+ */
+.hp-doc .hp-mermaidbox [data-hp-label] {
+  cursor: text;
+}
+
+/* 看得见但改不了的那些（实体名 / 状态名、位置不唯一的）：给个「不行」的样子，
+   但**仍然要挂标记** —— mousedown 靠它判断「别把视图滚走」 */
+.hp-doc .hp-mermaidbox [data-hp-label="no"] {
+  cursor: not-allowed;
+}
+
+.hp-doc .hp-mermaidbox [data-hp-label]:hover {
+  outline: 1px dashed var(--hp-accent);
+  outline-offset: 2px;
+}
+
+.hp-doc .hp-mermaidbox [contenteditable="true"] {
+  cursor: text;
+  outline: 2px solid var(--hp-accent);
+  outline-offset: 2px;
+  background: var(--hp-hover);
+  /* 编辑态按内容长：mermaid 给的 foreignObject 高度是渲染时算死的 */
+  min-height: 1em;
+}
+
+.hp-doc .hp-mermaidbox[data-state="error"] {
+  border-left: 3px solid var(--hp-error);
+  background: var(--hp-error-bg);
+  text-align: left;
+}
+
+.hp-doc .hp-mermaidbox__error {
+  display: none;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--hp-error);
+  font-family: var(--hp-font-md);
+  font-size: 0.8em;
+  white-space: pre-wrap;
+}
+
+.hp-doc .hp-mermaidbox[data-state="error"] .hp-mermaidbox__error {
+  display: block;
+}
+
+/* 112：表格行列菜单（挂在 document.body，不在 .hp-doc 内） */
+.hp-tablemenu {
+  position: fixed;
+  z-index: 90;
+  min-width: 148px;
+  padding: 4px 0;
+  border: 1px solid var(--hp-border);
+  border-radius: 6px;
+  background: var(--hp-surface);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  font-size: 13px;
+}
+
+.hp-tablemenu__item {
+  display: block;
+  width: 100%;
+  padding: 5px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--hp-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.hp-tablemenu__item:hover {
+  background: var(--hp-accent-soft, rgba(43, 108, 176, 0.12));
+}
+
+.hp-tablemenu__item.is-disabled {
+  color: var(--hp-text-weak);
+  opacity: 0.55;
+  cursor: default;
+}
+
+.hp-tablemenu__item.is-disabled:hover {
+  background: transparent;
+}
+
+.hp-tablemenu__sep {
+  margin: 4px 0;
+  border-top: 1px solid var(--hp-border);
+}

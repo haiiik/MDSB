@@ -1,0 +1,68 @@
+{
+  "name": "mdsb-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build --mode production",
+    "build:dev": "vue-tsc --noEmit && vite build --minify false --mode development",
+    "preview": "vite preview",
+    "test": "vitest run --no-file-parallelism && playwright test --grep-invert @perf && playwright test --grep @perf --workers=1",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "test:perf": "playwright test --grep @perf --workers=1",
+    "report:drift": "vitest run --config vitest.drift.config.ts",
+    "pin:drift": "vitest run --config vitest.pin.config.ts"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.14",
+    "@lezer/highlight": "^1.2.5",
+    "@wailsio/runtime": "3.0.0-beta.24",
+    "codemirror": "^6.0.2",
+    "hast-util-from-html": "^2.0.3",
+    "hast-util-to-html": "^9.0.5",
+    "hast-util-to-mdast": "^10.1.2",
+    "mdast-util-frontmatter": "^2.0.1",
+    "mdast-util-to-hast": "^13.2.1",
+    "mermaid": "^11.17.2",
+    "prosemirror-commands": "^1.7.2",
+    "prosemirror-example-setup": "^1.2.3",
+    "prosemirror-history": "^1.5.1",
+    "prosemirror-inputrules": "^1.5.1",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-model": "^1.25.12",
+    "prosemirror-schema-basic": "^1.2.5",
+    "prosemirror-schema-list": "^1.5.1",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-tables": "^1.8.5",
+    "prosemirror-transform": "^1.12.2",
+    "prosemirror-view": "^1.42.6",
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
+    "unified": "^11.0.5",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@types/hast": "^3.0.5",
+    "@types/mdast": "^4.0.4",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.5",
+    "vitest": "^3.2.7",
+    "vue-tsc": "^2.2.12"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

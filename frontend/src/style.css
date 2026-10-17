@@ -1,0 +1,177 @@
+/* 设计令牌：浅深两档。切换由 view.ts 往 <html> 写 data-theme 完成 */
+:root,
+html[data-theme="light"] {
+  --hp-bg: #f6f3ed;
+  --hp-surface: #ffffff;
+  --hp-border: #e2ddd3;
+  --hp-text: #2b2f36;
+  --hp-text-weak: #8a8f98;
+  --hp-accent: #274a7a;
+  --hp-on-accent: #ffffff;
+  --hp-hover: rgba(39, 74, 122, 0.08);
+  --hp-selected: rgba(39, 74, 122, 0.12);
+  --hp-code-bg: #f2efe9;
+  --hp-quote-bg: rgba(39, 74, 122, 0.04);
+  --hp-error: #b3261e;
+  --hp-error-bg: #fbeeec;
+  --hp-error-border: #e5c1bd;
+  --hp-mask: rgba(20, 24, 30, 0.32);
+  --hp-shadow: rgba(0, 0, 0, 0.14);
+  /* 118：查找高亮两档色：命中项与当前项 */
+  --hp-search-bg: rgba(255, 205, 60, 0.42);
+  --hp-search-current: #ffb340;
+  /* 滚动条（深色档那条白滚动条的修复配套，见下面 color-scheme 那段） */
+  --hp-scroll-thumb: #c3bcb0;
+  --hp-scroll-hover: #a8a094;
+  --hp-topbar-h: 32px;
+  --hp-statusbar-h: 26px;
+  --hp-sidebar-w: 260px;
+  --hp-font-ui: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  --hp-font-md: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+}
+
+/*
+ * 深色档：正文 #d8dde4 on #1e2126 对比度约 12:1，
+ * 强调色换成浅蓝（#8fb6e3），否则 navy 在深底上不到 4.5:1。
+ */
+html[data-theme="dark"] {
+  --hp-bg: #1e2126;
+  --hp-surface: #262a31;
+  --hp-border: #3c434c;
+  --hp-text: #d8dde4;
+  --hp-text-weak: #98a0ab;
+  --hp-accent: #8fb6e3;
+  --hp-on-accent: #16202c;
+  --hp-search-bg: rgba(255, 205, 60, 0.26);
+  --hp-search-current: #b8791f;
+  --hp-hover: rgba(143, 182, 227, 0.14);
+  --hp-selected: rgba(143, 182, 227, 0.2);
+  --hp-code-bg: #2c313a;
+  --hp-quote-bg: rgba(143, 182, 227, 0.08);
+  --hp-error: #ff9a8f;
+  --hp-error-bg: #3a2422;
+  --hp-error-border: #5c3632;
+  --hp-mask: rgba(0, 0, 0, 0.55);
+  --hp-shadow: rgba(0, 0, 0, 0.5);
+  --hp-scroll-thumb: #565e69;
+  --hp-scroll-hover: #6d7682;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/*
+ * 修 bug：深色档下滚动条还是白的。
+ *
+ * 根因不是少写了 `::-webkit-scrollbar`，而是没声明 `color-scheme`：
+ * WebView2/Chromium 在 `color-scheme: light`（默认）下**一律画浅色原生滚动条**，
+ * 表单控件、`<select>` 下拉、日期选择器同理。所以先把配色方案跟着主题走，
+ * 再补一层自定义样式把颜色钉到设计令牌上（只留 color-scheme 的话，
+ * 滚动条是"深色"了，但深浅两档的宽度与圆角跟我们的界面不搭）。
+ */
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/*
+ * 标准属性这一层不能省：Chromium 121+ 认 `scrollbar-color`/`scrollbar-width`，
+ * 而它们一旦生效，`::-webkit-scrollbar` 那套就被忽略 —— 两层都要写、两层都要改。
+ *
+ * 127（她：「滚动条有点太细了，有点不好选中，加粗一点点」）：
+ * `thin` 在 Windows 上轨道只有 ~11px、拇指 6~7px，鼠标要瞄才能点中 —— 滚动条是拿来抓的，不是拿来欣赏的。
+ * 这里给**明确的 14px**（Chromium 121+ 的 `scrollbar-width` 支持长度值），
+ * 并在前面留一行 `auto` 兜底：不认长度值的引擎退回默认宽度，也不会掉回细的那档。
+ */
+* {
+  scrollbar-color: var(--hp-scroll-thumb) var(--hp-bg);
+  scrollbar-width: auto;
+  scrollbar-width: 14px;
+}
+
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--hp-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  /* 轨道 14px、透明边 3px → 拇指 8px；悬停时边收到 2px → 拇指 10px（抓得住，又不会显得笨重） */
+  border: 3px solid var(--hp-bg);
+  border-radius: 7px;
+  background: var(--hp-scroll-thumb);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  border-width: 2px;
+  background: var(--hp-scroll-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--hp-bg);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--hp-bg);
+  color: var(--hp-text);
+  font-family: var(--hp-font-ui);
+  font-size: 14px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: rgba(39, 74, 122, 0.08);
+}
+
+.placeholder {
+  color: var(--hp-text-weak);
+  font-size: 13px;
+}
+
+/* ---------- 118：查找高亮 ---------- */
+/* 编辑模式（PM decorations）与源码模式（CM decorations）走类名。
+   阅读模式走 CSS Custom Highlight API —— 它不改 DOM，所以样式只能写在 ::highlight() 里，
+   这也是为什么这里要写两套：一套 class、一套 highlight 名字，视觉上必须完全一致。 */
+.hp-search {
+  background: var(--hp-search-bg);
+  border-radius: 2px;
+}
+
+.hp-search--current {
+  background: var(--hp-search-current);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--hp-accent);
+}
+
+::highlight(hp-search) {
+  background-color: var(--hp-search-bg);
+}
+
+::highlight(hp-search-current) {
+  background-color: var(--hp-search-current);
+}
