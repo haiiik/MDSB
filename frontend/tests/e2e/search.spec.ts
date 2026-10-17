@@ -201,3 +201,42 @@ test("源码模式：找的是源文本，替换全部同样一步撤销", async
   await page.keyboard.press("Control+s");
   expect(await savedOf(page)).toContain("正文里提到 强调 与 avg 平均耗时 AVG。");
 });
+
+/**
+ * 131：查找条里的「替换」入口。
+ *
+ * 原来只有 `Ctrl+H` 会展开替换行，`Ctrl+F` 打开的是同一条工具条但少一行 ——
+ * 她实测的反馈是「和 Ctrl+F 长得一样，替换是不是没有」。
+ * 入口藏在快捷键里等于没有入口，所以工具条上给一颗**看得见的开关**。
+ */
+test("Ctrl+F 打开后：替换行默认收起，但有一颗「替换」按钮可展开", async ({ page }) => {
+  await seedAndOpen(page, "edit");
+  await page.keyboard.press("Control+f");
+  await expect(page.getByTestId("search-input")).toBeVisible();
+  await expect(page.getByTestId("replace-input")).toHaveCount(0);
+
+  const toggle = page.getByTestId("search-toggle-replace");
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  await expect(page.getByTestId("replace-input")).toBeVisible();
+  // 展开后焦点该在替换框里（省一次点击）
+  await expect(page.getByTestId("replace-input")).toBeFocused();
+
+  await toggle.click();
+  await expect(page.getByTestId("replace-input")).toHaveCount(0);
+});
+
+test("Ctrl+H 仍然直接展开，且那颗按钮跟着亮起来（同一份状态，不各算一套）", async ({ page }) => {
+  await seedAndOpen(page, "edit");
+  await page.keyboard.press("Control+h");
+  await expect(page.getByTestId("replace-input")).toBeVisible();
+  await expect(page.getByTestId("search-toggle-replace")).toHaveClass(/is-on/);
+});
+
+test("阅读模式是只读档：不给替换入口（不是置灰，是不出现）", async ({ page }) => {
+  await seedAndOpen(page, "read");
+  await page.keyboard.press("Control+f");
+  await expect(page.getByTestId("search-input")).toBeVisible();
+  await expect(page.getByTestId("search-toggle-replace")).toHaveCount(0);
+  await expect(page.getByTestId("replace-input")).toHaveCount(0);
+});

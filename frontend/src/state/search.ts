@@ -131,7 +131,17 @@ export function gotoMatch(delta: 1 | -1): void {
 
 export function openSearch(withReplace = false): void {
   search.open = true;
-  search.withReplace = search.withReplace || withReplace;
+  search.withReplace = search.withReplace || withReplace;}
+
+/**
+ * 查找条上那颗「替换」按钮：展开 / 收起替换行。
+ *
+ * 118 第一版只有 `Ctrl+H` 会展开替换，`Ctrl+F` 打开的是同一条工具条但少一行 ——
+ * 她实测的反馈是「和 Ctrl+F 长得一样，替换是不是没有」。入口藏在快捷键里等于没有入口，
+ * 所以这里给一个**看得见的开关**；`Ctrl+H` 保留为「打开并直接展开」的快捷路径。
+ */
+export function toggleReplace(): void {
+  search.withReplace = !search.withReplace;
 }
 
 export function closeSearch(): void {

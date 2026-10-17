@@ -10,6 +10,7 @@ import {
   setSearchOptions,
   setSearchQuery,
   searchAdapter,
+  toggleReplace,
 } from "../state/search";
 
 /**
@@ -37,6 +38,12 @@ function focusInput(): void {
     input.value?.focus();
     input.value?.select();
   });
+}
+
+/** 那颗「替换」按钮：展开时顺手把焦点给替换输入框（收起时不动，别把光标从查找框抢走） */
+function onToggleReplace(): void {
+  toggleReplace();
+  if (search.withReplace) void nextTick(() => replaceInput.value?.focus());
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -112,6 +119,16 @@ watch(
         @click="setSearchOptions({ [o.key]: !search.options[o.key] })"
       >
         {{ o.label }}
+      </button>
+      <button
+        v-if="canReplace"
+        class="searchbar__opt"
+        :class="{ 'is-on': search.withReplace }"
+        title="展开 / 收起替换（Ctrl+H 直接展开）"
+        data-testid="search-toggle-replace"
+        @click="onToggleReplace"
+      >
+        替换
       </button>
       <button class="searchbar__close" title="关闭 (Esc)" data-testid="search-close" @click="closeSearch()">×</button>
     </div>
