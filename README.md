@@ -10,16 +10,11 @@
 
 | 阅读模式 | 编辑模式 | Mermaid 渲染 | 表格与代码块 |
 | --- | --- | --- | --- |
-| ![阅读模式](<img width="2240" height="1507" alt="01-read" src="https://github.com/user-attachments/assets/3e854711-076c-4f9d-a7b8-051fe2c876f3" />
-) | ![编辑模式](<img width="2240" height="1507" alt="02-edit" src="https://github.com/user-attachments/assets/29b2b492-b974-4be7-9681-970449243ae9" />
-) | ![Mermaid](<img width="2240" height="1507" alt="03-mermaid" src="https://github.com/user-attachments/assets/fca441ac-ce8c-4bf7-a29c-bff2b9ffbe89" />
-) | ![表格与代码块](<img width="2240" height="1507" alt="04-table-code" src="https://github.com/user-attachments/assets/512501a6-1f88-4c4e-8ee9-af73e12c589b" />
-) |
+| <img src="https://github.com/user-attachments/assets/3e854711-076c-4f9d-a7b8-051fe2c876f3" alt="01-read" width="260"> | <img src="https://github.com/user-attachments/assets/29b2b492-b974-4be7-9681-970449243ae9" alt="02-edit" width="260"> | <img src="https://github.com/user-attachments/assets/fca441ac-ce8c-4bf7-a29c-bff2b9ffbe89" alt="03-mermaid" width="260"> | <img src="https://github.com/user-attachments/assets/512501a6-1f88-4c4e-8ee9-af73e12c589b" alt="04-table-code" width="260"> |
 
 **深浅两档主题**（点标签栏齿轮右侧那颗日/月开关）：
 
-![深浅主题切换](<img width="1000" height="672" alt="theme-toggle" src="https://github.com/user-attachments/assets/a1284159-952d-4876-8ebc-9b285a8b14fe" />
-)
+<img src="https://github.com/user-attachments/assets/a1284159-952d-4876-8ebc-9b285a8b14fe" alt="深浅主题切换" width="760">
 
 ## 功能清单
 
