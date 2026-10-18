@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { gotoApp, setMode } from "./mockApp";
+import { freshSession, gotoApp, setMode } from "./mockApp";
 
 /**
  * 005 三模式切换 + 010 多标签。
@@ -221,3 +221,39 @@ test("没有活动标签时底栏整组模式按钮不出现（不能凭空切�
   await expect(page.getByTestId("mode-picker")).toHaveCount(0);
 });
 
+
+/**
+ * 134：标签多到溢出时，当前标签必须自己滚进可视区。
+ * 之前只有 `overflow-x: auto`：从资源管理器双击打开一篇排在后面的文档，
+ * 窗口跳到前台、标签也在最右边缘之外，看上去就像"没打开"。
+ */
+test("标签溢出时：激活最右那一篇，它会滚进可视区", async ({ page }) => {
+  await freshSession(page);
+  await gotoApp(page);
+  for (let i = 1; i <= 12; i++) {
+    const p = "/demo/长名字标签-" + i + ".md";
+    await page.evaluate(
+      ([path, text]) => {
+        (window as unknown as { __hpMockSeedFile: (a: string, b: string) => void }).__hpMockSeedFile(path, text);
+        (window as unknown as { __hpMockPickPath?: string }).__hpMockPickPath = path;
+      },
+      [p, "# 标签 " + i + "\n\n正文。\n"]
+    );
+    await page.getByTestId("tab-open").click();
+    await page.waitForTimeout(120);
+  }
+  const tabs = page.locator(".tab");
+  expect(await tabs.count()).toBe(12);
+
+  const bar = await page.getByTestId("tabbar").boundingBox();
+  const last = tabs.last();
+  await last.click();
+  await page.waitForTimeout(400);
+
+  const lb = await last.boundingBox();
+  expect(lb).not.toBeNull();
+  // 右缘要落在可视区内（留 1px 容差），否则用户看不到当前标签
+  expect(lb!.x + lb!.width).toBeLessThanOrEqual(bar!.x + bar!.width + 1);
+  // 而且它是当前标签（高亮在滚过去的那一篇上，不是滚到别处）
+  await expect(last).toHaveClass(/is-active/);
+});

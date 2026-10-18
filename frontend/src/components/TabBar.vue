@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t as msg } from "../i18n";
-import { reactive } from "vue";
+import { nextTick, reactive, ref, watch } from "vue";
 import ThemeToggle from "./ThemeToggle.vue";
 import {
   activate,
@@ -36,6 +36,23 @@ const menu = reactive({
 });
 
 const drag = reactive({ from: -1, over: -1 });
+
+/**
+ * 134：标签多到溢出时，**当前标签要自己滚进可视区**。
+ * 之前只有 `overflow-x: auto`，靠人自己拖滚动条 —— 从资源管理器双击打开一篇排在后面的文档，
+ * 窗口跳到前台了、标签也在最右边缘外，看上去就像"没打开"。
+ * `inline: "nearest"` 是关键：已经在可视区时一步都不滚，不做居中跳动。
+ */
+const bar = ref<HTMLElement | null>(null);
+watch(
+  () => tabs.activeId,
+  async () => {
+    await nextTick();
+    const el = bar.value?.querySelector<HTMLElement>(".tab.is-active");
+    el?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  },
+  { immediate: true },
+);
 
 function onMiddle(e: MouseEvent, id: string) {
   if (e.button === 1) {
@@ -92,7 +109,7 @@ function onDrop(to: number) {
 </script>
 
 <template>
-  <div class="tabbar" data-testid="tabbar">
+  <div ref="bar" class="tabbar" data-testid="tabbar">
     <div
       v-for="(t, i) in tabs.list"
       :key="t.id"
