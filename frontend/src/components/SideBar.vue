@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "../i18n";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { activeMarkdown, activeTab, getHost, globalError } from "../state/documents";
 import { panel, toggleCollapsed } from "../state/panel";
@@ -154,7 +155,7 @@ function jump(h: HeadingItem) {
 
 async function askClear() {
   const choice = await confirm({
-    title: "清空最近文件",
+    title: t('sidebar.clearAll'),
     message: "清空后已打开的标签不受影响。",
     actions: ["清空"],
   });
@@ -202,7 +203,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
           role="tab"
           :aria-selected="panel.page === 'recent'"
           data-testid="page-recent"
-          title="最近打开过的文件"
+          :title="t('sidebar.recentHint')"
           @click="panel.page = 'recent'"
         >
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -215,16 +216,14 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
               stroke-linecap="round"
               stroke-linejoin="round"
             />
-          </svg>
-          最近
-        </button>
+          </svg>{{ t('sidebar.recent') }}</button>
         <button
           class="sidebar__tab"
           :class="{ 'is-active': panel.page === 'outline' }"
           role="tab"
           :aria-selected="panel.page === 'outline'"
           data-testid="page-outline"
-          title="本文档的标题结构"
+          :title="t('sidebar.outlineHint')"
           @click="panel.page = 'outline'"
         >
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -235,13 +234,11 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
               stroke-width="1.5"
               stroke-linecap="round"
             />
-          </svg>
-          导航
-        </button>
+          </svg>{{ t('sidebar.outline') }}</button>
       </div>
       <button
         class="sidebar__edge"
-        title="收起侧栏"
+        :title="t('sidebar.collapse')"
         data-testid="collapse-sidebar"
         @click="toggleCollapsed()"
       >
@@ -280,21 +277,21 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
             @mouseleave="stopMarquee"
           >
             <span class="recent__name"><span class="recent__text">{{ baseName(e.path) }}</span></span>
-            <span v-if="e.pinned" class="recent__flag" title="已置顶">★</span>
-            <span v-if="isUnavailable(e.path)" class="recent__flag is-bad" title="文件已不存在或无法读取">不可用</span>
+            <span v-if="e.pinned" class="recent__flag" :title="t('sidebar.pinned')">★</span>
+            <span v-if="isUnavailable(e.path)" class="recent__flag is-bad" :title="t('sidebar.unavailable')">{{ t('sidebar.unavailableShort') }}</span>
           </button>
           <span class="recent__ops">
             <button
               :class="{ 'is-on': e.pinned }"
-              :title="e.pinned ? '取消置顶' : '置顶'"
-              :aria-label="e.pinned ? '取消置顶' : '置顶'"
+              :title="e.pinned ? t('sidebar.unpin') : t('sidebar.pin')"
+              :aria-label="e.pinned ? t('sidebar.unpin') : t('sidebar.pin')"
               data-testid="recent-pin"
               @click.stop="togglePin(e.path)"
             >
               ★
             </button>
             <button
-              title="从列表移除"
+              :title="t('sidebar.remove')"
               aria-label="从列表移除"
               data-testid="recent-remove"
               @click.stop="removeRecent(e.path)"
@@ -305,14 +302,14 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
         </li>
       </ul>
       <button v-if="recent.items.length" class="sidebar__foot" data-testid="clear-recent" @click="askClear">
-        清空最近文件
+        {{ t('sidebar.clearAll') }}
       </button>
     </div>
 
     <!-- 大纲 -->
     <div v-else class="sidebar__body" data-testid="outline-list">
-      <p v-if="!activeTab" class="placeholder">没有打开的文档</p>
-      <p v-else-if="tree.length === 0" class="placeholder">这份文档没有标题</p>
+      <p v-if="!activeTab" class="placeholder" data-testid="outline-no-doc">{{ t('sidebar.noDoc') }}</p>
+      <p v-else-if="tree.length === 0" class="placeholder" data-testid="outline-empty">{{ t('sidebar.noHeadings') }}</p>
       <ul v-else class="outline">
         <li
           v-for="row in flatten(tree)"
@@ -334,7 +331,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
     </div>
   </aside>
 
-  <button v-else class="rail" title="展开侧栏" data-testid="sidebar-rail" @click="toggleCollapsed()">
+  <button v-else class="rail" :title="t('sidebar.expand')" data-testid="sidebar-rail" @click="toggleCollapsed()">
     ⟩
   </button>
 
@@ -344,18 +341,16 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
   -->
   <div v-if="recentMenu.open" class="menu-mask" @click="closeRecentMenu" @contextmenu.prevent="closeRecentMenu">
     <ul class="menu" :style="{ left: recentMenu.x + 'px', top: recentMenu.y + 'px' }" @click.stop>
-      <li data-testid="recent-menu-copy" @click="menuCopyPath">复制文件路径</li>
+      <li data-testid="recent-menu-copy" @click="menuCopyPath">{{ t('menu.copyPath') }}</li>
       <li
         class="menu__item"
         :class="{ 'is-disabled': !canReveal }"
         data-testid="recent-menu-reveal"
         @click="menuReveal"
-      >
-        在资源管理器中显示
-      </li>
+      >{{ t('menu.reveal') }}</li>
       <li class="menu__sep" />
       <li data-testid="recent-menu-pin" @click="menuPin">{{ menuPinned ? "取消置顶" : "置顶" }}</li>
-      <li data-testid="recent-menu-remove" @click="menuRemove">从列表移除</li>
+      <li data-testid="recent-menu-remove" @click="menuRemove">{{ t('sidebar.remove') }}</li>
     </ul>
   </div>
 </template>
