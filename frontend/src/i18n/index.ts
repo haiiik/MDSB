@@ -63,6 +63,23 @@ export function normalizeLang(raw: string | null | undefined): Lang | null {
 }
 
 const en: Record<MsgKey, string> = {
+  "dialog.unsavedTitle": "Unsaved changes",
+  "dialog.unsavedMsg": "“{name}” has unsaved changes. Save first?",
+  "dialog.unsavedNewNote": "\nThis document was never saved - saving asks for a location and a name.",
+  "dialog.saveAsName": "Save and name",
+  "dialog.discard": "Discard",
+  "dialog.saveFailed": "Save failed",
+  "dialog.unknownError": "Unknown error",
+  "dialog.gotIt": "OK",
+  "dialog.recoverTitle": "Unsaved content found",
+  "dialog.recoverMissing": "The file behind “{name}” is gone, but an unsaved snapshot exists. Restore it?",
+  "dialog.recoverDiff": "An unsaved snapshot of “{name}” differs from the file on disk. Restore it?",
+  "dialog.restore": "Restore",
+  "open.cannotOpen": "Cannot open “{name}”",
+  "drop.onlyMarkdown": "Only .md / .markdown files can be opened",
+  "drop.hint": "Drop to open a Markdown file",
+  "dialog.saveAsFailed": "Save as failed",
+
   "status.words": "{words} words",
   "status.lines": "{lines} lines",
   "status.headings": "{headings} headings",

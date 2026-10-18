@@ -5,6 +5,23 @@
  * 不放：内部标识、日志文案、给机器看的字符串。
  */
 const zh = {
+  "dialog.unsavedTitle": "未保存的改动",
+  "dialog.unsavedMsg": "「{name}」有未保存的改动，要先保存吗？",
+  "dialog.unsavedNewNote": "\n这份还没有保存过，保存时要先选存放位置并起名字。",
+  "dialog.saveAsName": "保存并命名",
+  "dialog.discard": "丢弃",
+  "dialog.saveFailed": "保存失败",
+  "dialog.unknownError": "未知错误",
+  "dialog.gotIt": "知道了",
+  "dialog.recoverTitle": "发现未保存的内容",
+  "dialog.recoverMissing": "「{name}」的原文件已不存在，但有一份上次未保存的内容。要恢复吗？",
+  "dialog.recoverDiff": "「{name}」有上次未保存的内容（与磁盘上的版本不同）。要恢复吗？",
+  "dialog.restore": "恢复",
+  "open.cannotOpen": "无法打开「{name}」",
+  "drop.onlyMarkdown": "只能打开 .md / .markdown 文件",
+  "drop.hint": "松开以打开 Markdown 文件",
+  "dialog.saveAsFailed": "另存为失败",
+
   "status.words": "{words} 字",
   "status.lines": "{lines} 行",
   "status.headings": "{headings} 标题",

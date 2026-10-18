@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t as msg, tf } from "./i18n";
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { getHost } from "./host";
 import type { Host, HostInfo } from "./host/types";
@@ -64,16 +65,16 @@ async function requestCloseTab(id: string) {
     return;
   }
   const choice = await confirm({
-    title: "未保存的改动",
+    title: msg("dialog.unsavedTitle"),
     message:
-      `「${tab.name}」有未保存的改动，要先保存吗？` +
+      tf("dialog.unsavedMsg", { name: tab.name }) +
       // 127（她：「关闭时让重命名文件，或者用另存」）：未命名档的「保存」其实是选位置 + 起名，
       // 按钮上就该说出来，别让人以为按下去会像普通文档那样原地存好。
-      (tab.path ? "" : "\n这份还没有保存过，保存时要先选存放位置并起名字。"),
-    actions: [tab.path ? "保存" : "保存并命名", "丢弃"],
+      (tab.path ? "" : msg("dialog.unsavedNewNote")),
+    actions: [tab.path ? msg("dialog.save") : msg("dialog.saveAsName"), msg("dialog.discard")],
   });
   if (choice === null) return;
-  if (choice === "丢弃") {
+  if (choice === msg("dialog.discard")) {
     closeTab(id);
     return;
   }
@@ -81,7 +82,7 @@ async function requestCloseTab(id: string) {
   if (r.ok) closeTab(id);
   // 另存为被取消 = 用户改主意了，标签留着继续编辑，不报「保存失败」
   else if (r.error !== "已取消") {
-    await confirm({ title: "保存失败", message: r.error ?? "未知错误", actions: ["知道了"] });
+    await confirm({ title: msg("dialog.saveFailed"), message: r.error ?? msg("dialog.unknownError"), actions: [msg("dialog.gotIt")] });
   }
 }
 
@@ -90,13 +91,13 @@ async function offerRecovery(h: Host) {
   const items = await scanRecoverable();
   for (const item of items) {
     const choice = await confirm({
-      title: "发现未保存的内容",
+      title: msg("dialog.recoverTitle"),
       message: item.fileMissing
-        ? `「${item.name}」的原文件已不存在，但有一份上次未保存的内容。要恢复吗？`
-        : `「${item.name}」有上次未保存的内容（与磁盘上的版本不同）。要恢复吗？`,
-      actions: ["恢复", "丢弃"],
+        ? tf("dialog.recoverMissing", { name: item.name })
+        : tf("dialog.recoverDiff", { name: item.name }),
+      actions: [msg("dialog.restore"), msg("dialog.discard")],
     });
-    if (choice === "恢复") {
+    if (choice === msg("dialog.restore")) {
       const existing = tabs.list.find((t) => t.path === item.path);
       if (existing) {
         existing.markdown = item.content;
@@ -120,7 +121,7 @@ async function drainStartup(h: Host) {
   const paths = await h.takeStartupFiles();
   for (const p of paths) {
     const ok = await openPath(p);
-    if (!ok) globalError.value = `无法打开「${p.split(/[\\/]/).pop() ?? p}」`;
+    if (!ok) globalError.value = tf("open.cannotOpen", { name: p.split(/[\\/]/).pop() ?? p });
   }
 }
 
@@ -148,7 +149,7 @@ function onDrop() {
   // 非 md 的拒绝提示：mock 在页面内就能判定；桌面由 Go 侧过滤后静默丢弃，
   // 这里补一句可见反馈，避免用户拖了没反应以为坏了
   window.setTimeout(() => {
-    if (tabs.list.length === 0) dropRejected.value = "只能打开 .md / .markdown 文件";
+    if (tabs.list.length === 0) dropRejected.value = msg("drop.onlyMarkdown");
   }, 250);
 }
 
@@ -180,7 +181,7 @@ async function onKeydown(e: KeyboardEvent) {
     e.preventDefault();
     const r = await saveActiveAs();
     if (!r.ok && r.error && r.error !== "已取消") {
-      await confirm({ title: "另存为失败", message: r.error, actions: ["知道了"] });
+      await confirm({ title: msg("dialog.saveAsFailed"), message: r.error, actions: [msg("dialog.gotIt")] });
     }
   } else if (key === "s") {
     e.preventDefault();
@@ -267,7 +268,7 @@ defineExpose({ confirmQuit, requestCloseTab, offerRecovery });
     <StatusBar :error="error || autoSaveError" @clear-error="dismissBarError" />
     <div v-if="dropping" class="dropzone" data-testid="drop-overlay">
       <div class="dropzone__inner">
-        松开以打开 Markdown 文件
+        {{ msg("drop.hint") }}
         <small v-if="dropRejected" class="dropzone__reject">{{ dropRejected }}</small>
       </div>
     </div>
