@@ -192,6 +192,10 @@ Function LangPageCreate
   ${NSD_CreateRadioButton} 12u 62u 80% 14u "English"
   Pop $LangEn
 
+  ; HP_NO_PRESELECT：只给**自检构建**用的开关（编译时 -DHP_NO_PRESELECT=1），
+  ; 让两颗单选都不预选，用来验「没选就不能下一步」这条拦截在真界面上成立。
+  ; 正式包不带这个定义。
+  !ifndef HP_NO_PRESELECT
   ; GetUserDefaultUILanguage：0x0804 简中 / 0x0C04,0x1004,0x0404 繁中（都算中文界面更贴近她的用法）
   System::Call 'user32::GetUserDefaultUILanguage()i.r1'
   ${If} $1 == 0x0804
@@ -211,6 +215,7 @@ Function LangPageCreate
     ; 认不出来：**两颗都不选**，交给 LEAVE 拦住
     StrCpy $LangChosen ""
   ${EndIf}
+  !endif
 FunctionEnd
 
 Function LangPageLeave
