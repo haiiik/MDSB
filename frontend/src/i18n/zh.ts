@@ -17,6 +17,18 @@ const zh = {
   "search.replaceAll": "替换全部",
   "dialog.save": "保存",
   "dialog.cancel": "取消",
+  "status.width": "宽度",
+  "status.width.narrow": "窄",
+  "status.width.normal": "标准",
+  "status.width.wide": "宽",
+  "status.width.full": "全宽",
+  "status.measureWidth": "正文测量宽度",
+  "status.zoomIn": "放大 10%",
+  "status.zoomOut": "缩小 10%",
+  "status.zoomReset": "重置为 100%",
+  "status.closeHint": "关闭这条提示",
+  "status.dirty": "有未保存改动",
+  "status.statsTitle": "汉字 {cjk} + 英文单词 {latin}；不计代码块与行内代码",
 } as const;
 
 export default zh;

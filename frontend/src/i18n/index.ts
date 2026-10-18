@@ -69,6 +69,18 @@ const en: Record<MsgKey, string> = {
   "search.replaceAll": "Replace all",
   "dialog.save": "Save",
   "dialog.cancel": "Cancel",
+  "status.width": "Width",
+  "status.width.narrow": "Narrow",
+  "status.width.normal": "Normal",
+  "status.width.wide": "Wide",
+  "status.width.full": "Full",
+  "status.measureWidth": "Content measure width",
+  "status.zoomIn": "Zoom in 10%",
+  "status.zoomOut": "Zoom out 10%",
+  "status.zoomReset": "Reset to 100%",
+  "status.closeHint": "Dismiss this message",
+  "status.dirty": "Unsaved changes",
+  "status.statsTitle": "{cjk} CJK + {latin} words; code blocks and inline code excluded",
 };
 
 export { en };

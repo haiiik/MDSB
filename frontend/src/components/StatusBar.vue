@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from "vue";
+import { t, tf } from "../i18n";
 import { activeTab, clampZoom, MODE_CYCLE, MODE_LABEL, setMode, setWidth, setZoom } from "../state/documents";
 import { clearModeHint, modeHint } from "../state/modeInstances";
 import { computeStats, type DocStats } from "../kernel/stats";
@@ -12,7 +13,12 @@ import type { WidthPreset } from "../kernel/render";
 defineProps<{ error: string }>();
 const emit = defineEmits<{ "clear-error": [] }>();
 
-const WIDTH_LABEL = { narrow: "窄", normal: "标准", wide: "宽", full: "全宽" } as const;
+const WIDTH_LABEL = {
+  narrow: () => t("status.width.narrow"),
+  normal: () => t("status.width.normal"),
+  wide: () => t("status.width.wide"),
+  full: () => t("status.width.full"),
+} as const;
 
 /**
  * 统计防抖：3000 行文档每次击键全量解析会拖慢输入（023 验收）。
@@ -57,11 +63,11 @@ onBeforeUnmount(() => {
       v-if="activeTab && stats"
       class="statusbar__item statusbar__stats"
       data-testid="status-stats"
-      :title="`汉字 ${stats.cjk} + 英文单词 ${stats.latin}；不计代码块与行内代码`"
+      :title="tf('status.statsTitle', { cjk: stats.cjk, latin: stats.latin })"
     >
       {{ stats.words }} 字 · {{ stats.lines }} 行 · {{ stats.headings }} 标题
     </span>
-    <span v-if="!activeTab" class="statusbar__item placeholder">未打开文档</span>
+    <span v-if="!activeTab" class="statusbar__item placeholder" data-testid="status-not-opened">{{ t("status.notOpened") }}</span>
     <!--
       127：错误提示要能关。原来这条只能等下一次操作把它覆盖掉，
       用户看着底部一直挂着「找不到小节：xxx」却没有办法收起来 —— 加一个右侧的叉，
@@ -71,8 +77,8 @@ onBeforeUnmount(() => {
       {{ error }}
       <button
         class="statusbar__close"
-        title="关闭这条提示"
-        aria-label="关闭这条提示"
+        :title="t('status.closeHint')"
+        :aria-label="t('status.closeHint')"
         data-testid="status-error-close"
         @click="emit('clear-error')"
       >
@@ -102,24 +108,24 @@ onBeforeUnmount(() => {
 
       <!-- 外壳改造：4 档宽度按钮（窄/标准/宽/全宽）排成一行太占地方，收成一个上拉选项 -->
       <label class="statusbar__group" data-testid="width-picker">
-        <strong>宽度</strong>
+        <strong>{{ t("status.width") }}</strong>
         <select
           class="statusbar__select"
           data-testid="width-select"
           :value="activeTab.width"
-          title="正文测量宽度"
+          :title="t('status.measureWidth')"
           @change="setWidth(($event.target as HTMLSelectElement).value as WidthPreset)"
         >
-          <option v-for="(label, w) in WIDTH_LABEL" :key="w" :value="w">{{ label }}</option>
+          <option v-for="(label, w) in WIDTH_LABEL" :key="w" :value="w">{{ label() }}</option>
         </select>
       </label>
 
       <span class="statusbar__group" data-testid="zoom-picker">
-        <button title="缩小 10%" data-testid="zoom-out" @click="setZoom(clampZoom(activeTab.zoom - 0.1))">−</button>
-        <button title="重置为 100%" data-testid="zoom-name" @click="setZoom(1)">
+        <button :title="t('status.zoomOut')" data-testid="zoom-out" @click="setZoom(clampZoom(activeTab.zoom - 0.1))">−</button>
+        <button :title="t('status.zoomReset')" data-testid="zoom-name" @click="setZoom(1)">
           {{ Math.round(activeTab.zoom * 100) }}%
         </button>
-        <button title="放大 10%" data-testid="zoom-in" @click="setZoom(clampZoom(activeTab.zoom + 0.1))">+</button>
+        <button :title="t('status.zoomIn')" data-testid="zoom-in" @click="setZoom(clampZoom(activeTab.zoom + 0.1))">+</button>
       </span>
 
       <!-- 130：右下角的文件名删了 —— 标签栏上就有名字，底栏再放一份是重复，
@@ -129,7 +135,7 @@ onBeforeUnmount(() => {
         v-if="activeTab.markdown !== activeTab.saved"
         class="statusbar__item statusbar__item--dirty"
         data-testid="status-dirty"
-        title="有未保存改动"
+        :title="t('status.dirty')"
       >
         未保存
       </span>

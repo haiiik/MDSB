@@ -102,8 +102,9 @@ test("没打开文档时，底栏左侧只出现一次「未打开文档」", as
     await page.locator(".tab").first().locator(".tab__close").click();
     await page.waitForTimeout(200);
   }
-  await expect(page.getByTestId("statusbar")).toContainText("未打开文档");
-  await expect(page.locator(".statusbar__item.placeholder", { hasText: "未打开文档" })).toHaveCount(1);
+  // 判据押 testid 不押中文文本：i18n 之后文案会随语言变（M3-135 定的迁移口径）
+  await expect(page.getByTestId("status-not-opened")).toBeVisible();
+  await expect(page.getByTestId("status-not-opened")).toHaveCount(1);
   // 空态下不该还有模式按钮与统计（它们都挂在 activeTab 上）
   await expect(page.getByTestId("mode-picker")).toHaveCount(0);
   await expect(page.getByTestId("status-stats")).toHaveCount(0);
