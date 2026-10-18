@@ -14,6 +14,8 @@
  * 设置里只有「中文 / English」双选（不做跟随系统）。
  */
 
+import { reactive } from "vue";
+
 export type Lang = "zh" | "en";
 
 export const LANGS: readonly Lang[] = ["zh", "en"] as const;
@@ -22,8 +24,12 @@ import zh from "./zh";
 
 export type MsgKey = keyof typeof zh;
 
-/** 当前界面语言。默认中文：读不到任何来源时的兜底（安装器一定会写一个值，正常走不到这里） */
-export const ui = { lang: "zh" as Lang };
+/**
+ * 当前界面语言。**必须是响应式的**：模板里 `t()` 读的是它，
+ * 用普通对象的话切完语言界面不会重渲染（表现成「设置里切了没反应」）。
+ * 默认中文：读不到任何来源时的兜底（安装器一定会写一个值，正常走不到这里）。
+ */
+export const ui = reactive<{ lang: Lang }>({ lang: "zh" });
 
 /** 取文案。缺 key 时不静默返回 undefined —— 宁可把 key 印在界面上，让人一眼看见漏译 */
 export function t(key: MsgKey): string {
@@ -69,6 +75,7 @@ const en: Record<MsgKey, string> = {
   "search.replaceAll": "Replace all",
   "dialog.save": "Save",
   "dialog.cancel": "Cancel",
+  "mode.tooltip": "Switch to {label} mode",
   "status.width": "Width",
   "status.width.narrow": "Narrow",
   "status.width.normal": "Normal",

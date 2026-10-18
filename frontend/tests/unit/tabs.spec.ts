@@ -1,3 +1,4 @@
+import { setLang } from "../../src/i18n";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Host } from "../../src/host/types";
 import {
@@ -11,7 +12,7 @@ import {
   hooks,
   isDirty,
   MODE_CYCLE,
-  MODE_LABEL,
+  modeLabel,
   moveTab,
   openPath,
   saveActive,
@@ -228,7 +229,12 @@ describe("模式与滚动", () => {
 
   // 名字只有一个来源（124 把「所见即所得」改成「编辑」，两处各自定义时改一处就会不一致）
   it("三档的显示名只有一份，且旧称「所见即所得」已经换掉", () => {
-    expect(MODE_LABEL).toEqual({ read: "阅读", edit: "编辑", source: "源码" });
+    expect([modeLabel("read"), modeLabel("edit"), modeLabel("source")]).toEqual(["阅读", "编辑", "源码"]);
+    // 语言可切：英文档换文案，切回来还是中文（钉的是「只有一份来源」这件事）
+    setLang("en");
+    expect(modeLabel("edit")).toBe("Editing");
+    setLang("zh");
+    expect(modeLabel("edit")).toBe("编辑");
   });
 
   it("setMode 只动当前标签，别的标签档不变", async () => {

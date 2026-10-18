@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from "vue";
 import { t, tf } from "../i18n";
-import { activeTab, clampZoom, MODE_CYCLE, MODE_LABEL, setMode, setWidth, setZoom } from "../state/documents";
+import { activeTab, clampZoom, MODE_CYCLE, modeLabel, setMode, setWidth, setZoom } from "../state/documents";
 import { clearModeHint, modeHint } from "../state/modeInstances";
 import { computeStats, type DocStats } from "../kernel/stats";
 import type { WidthPreset } from "../kernel/render";
@@ -99,10 +99,10 @@ onBeforeUnmount(() => {
           :class="{ 'is-on': activeTab.mode === m }"
           :data-testid="'mode-' + m"
           :aria-pressed="activeTab.mode === m"
-          :title="`切到${MODE_LABEL[m]}模式`"
+          :title="tf('mode.tooltip', { label: modeLabel(m) })"
           @click="setMode(m)"
         >
-          {{ MODE_LABEL[m] }}
+          {{ modeLabel(m) }}
         </button>
       </span>
 

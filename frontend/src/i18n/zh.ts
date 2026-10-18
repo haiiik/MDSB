@@ -17,6 +17,7 @@ const zh = {
   "search.replaceAll": "替换全部",
   "dialog.save": "保存",
   "dialog.cancel": "取消",
+  "mode.tooltip": "切到{label}模式",
   "status.width": "宽度",
   "status.width.narrow": "窄",
   "status.width.normal": "标准",

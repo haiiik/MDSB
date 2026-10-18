@@ -234,16 +234,20 @@ export function setMode(mode: Mode) {
  */
 export const MODE_CYCLE: Mode[] = ["read", "edit", "source"];
 
+import type { MsgKey } from "../i18n";
+import { t } from "../i18n";
+
 /**
  * 三档模式的显示名，**只这一份**（原来 StatusBar 与 TabBar 各写了一份，
  * 她这次要改名「所见即所得 → 编辑」就得改两处，那种重复是事故源）。
  * 顺序也直接复用 `MODE_CYCLE`：底栏那三个按钮从左到右就是 阅读 / 编辑 / 源码。
  */
-export const MODE_LABEL: Record<Mode, string> = {
-  read: "阅读",
-  edit: "编辑",
-  source: "源码",
-};
+const MODE_MSG: Record<Mode, MsgKey> = { read: "mode.read", edit: "mode.edit", source: "mode.source" };
+
+/** 三档模式的显示名：查 i18n，**仍然是只此一份**（124 的口径不变，只是从常量变成函数） */
+export function modeLabel(m: Mode): string {
+  return t(MODE_MSG[m]);
+}
 
 /**
  * 模式只有**一个入口**：底栏的三按钮组（`setMode`）。
