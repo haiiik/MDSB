@@ -42,8 +42,9 @@ func main() {
 		FileAssociations: []string{".md", ".markdown", ".mdown", ".mkd", ".mkdn"},
 		// 单实例（013）：已运行时再双击文件，不起第二个进程，
 		// 而是把路径转交给已有实例的队列并唤起主窗口。
+		// ID 按构建档分开（134 追加）：cdp 调试包不再和已装正式包抢转交，见 cdp_on/cdp_off。
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "io.mdsb.app",
+			UniqueID: instanceID,
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
 				for _, arg := range data.Args {
 					fileService.QueueStartupFile(arg)

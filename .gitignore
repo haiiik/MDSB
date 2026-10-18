@@ -29,3 +29,6 @@ frontend/scripts/
 samples/审批时效 样本.md
 frontend/test-results/
 frontend/playwright-report/
+
+# 桌面冒烟测试隔离出来的应用状态目录（不是她的，也不进仓库）
+.hp-smoke/
