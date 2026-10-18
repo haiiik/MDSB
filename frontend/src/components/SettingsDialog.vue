@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { settings, settingsOpen } from "../state/settings";
+import { t } from "../i18n";
 
 /** 130：只报「产品名 · 版本」——`wails · windows` 这些实现细节她不要看了（原来那行是 hostLabel · v版本） */
 defineProps<{ version: string }>();
@@ -40,6 +41,18 @@ function close() {
             <small class="row__hint">只影响阅读与编辑时的显示，不改动文档内容</small>
           </span>
           <input v-model="settings.codeLineNumbers" type="checkbox" data-testid="setting-linenumbers" />
+        </label>
+
+        <!-- M3-134：界面语言。只有双选（她定的口径：**不做「跟随系统」**，装的时候已经选过一次） -->
+        <label class="row">
+          <span class="row__label">
+            {{ t("settings.language") }}
+            <small class="row__hint">{{ t("settings.languageHint") }}</small>
+          </span>
+          <select v-model="settings.lang" class="row__select" data-testid="setting-lang">
+            <option value="zh">{{ t("lang.zh") }}</option>
+            <option value="en">{{ t("lang.en") }}</option>
+          </select>
         </label>
       </div>
 
