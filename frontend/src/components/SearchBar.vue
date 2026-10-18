@@ -128,9 +128,7 @@ watch(
         :title="t('search.replaceToggle')"
         data-testid="search-toggle-replace"
         @click="onToggleReplace"
-      >
-        替换
-      </button>
+      >{{ t("search.replace") }}</button>
       <button class="searchbar__close" :title="t('search.close')" data-testid="search-close" @click="closeSearch()">×</button>
     </div>
 
@@ -146,7 +144,7 @@ watch(
         @keydown="onReplaceKeydown"
         @input="search.replacement = ($event.target as HTMLInputElement).value"
       />
-      <button data-testid="replace-one" :disabled="!search.matches.length" @click="replaceCurrent()">替换</button>
+      <button data-testid="replace-one" :disabled="!search.matches.length" @click="replaceCurrent()">{{ t("search.replace") }}</button>
       <button data-testid="replace-all" :disabled="!search.matches.length" @click="replaceAllMatches()">
         替换全部
       </button>

@@ -161,12 +161,10 @@ function applyLink() {
         :class="{ 'is-active': linkOpen, 'is-disabled': marksBlocked }"
         data-testid="tb-link"
         :disabled="marksBlocked"
-        title="链接"
+        :title="t('toolbar.link')"
         type="button"
         @click="linkOpen = !linkOpen"
-      >
-        链接
-      </button>
+      >{{ t("toolbar.link") }}</button>
       <template v-if="linkOpen">
         <input
           ref="linkInput"

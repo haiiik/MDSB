@@ -368,8 +368,8 @@ function onWheel(e: WheelEvent) {
       {{ currentError }}
       <button
         class="pane__error-close"
-        title="关闭这条提示"
-        aria-label="关闭这条提示"
+        :title="t('status.closeHint')"
+        :aria-label="t('status.closeHint')"
         data-testid="open-error-close"
         @click="dismissError"
       >

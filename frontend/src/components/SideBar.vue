@@ -292,7 +292,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
             </button>
             <button
               :title="t('sidebar.remove')"
-              aria-label="从列表移除"
+              :aria-label="t('sidebar.remove')"
               data-testid="recent-remove"
               @click.stop="removeRecent(e.path)"
             >

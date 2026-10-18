@@ -110,7 +110,7 @@ function onDrop(to: number) {
     >
       <span v-if="isDirty(t)" class="tab__dirty" :title="msg('tab.dirty')" data-testid="tab-dirty">●</span>
       <span class="tab__name">{{ t.name }}</span>
-      <button class="tab__close" :title="msg('tab.close')" aria-label="关闭标签" @click.stop="emit('close', t.id)">
+      <button class="tab__close" :title="msg('tab.close')" :aria-label="msg('tab.closeTab')" @click.stop="emit('close', t.id)">
         ×
       </button>
     </div>
@@ -122,7 +122,7 @@ function onDrop(to: number) {
     <button
       class="tabbar__new"
       :title="msg('tab.newTabHint')"
-      aria-label="新增标签"
+      :aria-label="msg('tab.newTab')"
       data-testid="tab-new"
       @click="createUntitled()"
     >
@@ -138,7 +138,7 @@ function onDrop(to: number) {
     <button
       class="tabbar__open"
       :title="msg('tab.openHint')"
-      aria-label="打开文件"
+      :aria-label="msg('tab.open')"
       data-testid="tab-open"
       @click="getHost() && $emit('open')"
     >
@@ -163,7 +163,7 @@ function onDrop(to: number) {
     <button
       class="tabbar__settings"
       :title="msg('tab.settingsHint')"
-      aria-label="设置"
+      :aria-label="msg('dialog.settings')"
       data-testid="open-settings"
       @click="emit('open-settings')"
     >
