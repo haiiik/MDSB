@@ -40,6 +40,10 @@ Unicode true
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 !include "nsDialogs.nsh"
+; BM_SETCHECK / BM_GETCHECK / BST_CHECKED 都在这一份里。
+; 少了它，`${BM_SETCHECK}` 这类符号在 NSIS 里**不会报错**，会被当成字面量/0，
+; 于是"预选"和"读回勾选状态"全都静默失效 —— 语言页的拦截逻辑会永远判成"没选"。
+!include "WinMessages.nsh"
 
 !define APP      "MDStar"
 !define EXE      "MDStar.exe"
@@ -183,39 +187,64 @@ Var LangEn
 Var LangChosen
 
 Function LangPageCreate
+  ; 走 MUI 的页头（粗体标题 + 副标题），不然这一页上面空一块、和别的页不像一家人。
+  ; 官方 nsDialogs 例子里替换 MUI 页的写法就是先 MUI_HEADER_TEXT 再建对话框。
+  !insertmacro MUI_HEADER_TEXT "界面语言" "选择 MDStar 的界面语言（装完也能在设置里改）。"
   nsDialogs::Create 1018
   Pop $0
-  ${NSD_CreateLabel} 0 0 100% 28u "选择 MDStar 的界面语言（装完也能在设置里改）。"
-  Pop $0
-  ${NSD_CreateRadioButton} 12u 40u 80% 14u "中文"
+  ; 建不出来就明确放弃这一页（NSIS 的默认行为是"静默跳过"，出问题时什么都看不见）
+  ${If} $0 == error
+    Abort
+  ${EndIf}
+  ${NSD_CreateRadioButton} 0 6u 100% 12u "中文"
   Pop $LangZh
-  ${NSD_CreateRadioButton} 12u 62u 80% 14u "English"
+  ${NSD_CreateRadioButton} 0 26u 100% 12u "English"
   Pop $LangEn
 
   ; HP_NO_PRESELECT：只给**自检构建**用的开关（编译时 -DHP_NO_PRESELECT=1），
   ; 让两颗单选都不预选，用来验「没选就不能下一步」这条拦截在真界面上成立。
   ; 正式包不带这个定义。
   !ifndef HP_NO_PRESELECT
-  ; GetUserDefaultUILanguage：0x0804 简中 / 0x0C04,0x1004,0x0404 繁中（都算中文界面更贴近她的用法）
-  System::Call 'user32::GetUserDefaultUILanguage()i.r1'
-  ${If} $1 == 0x0804
-  ${OrIf} $1 == 0x0C04
-  ${OrIf} $1 == 0x1004
-  ${OrIf} $1 == 0x0404
-    SendMessage $LangZh ${BM_SETCHECK} ${BST_CHECKED} 0
-    StrCpy $LangChosen "zh"
-  ${ElseIf} $1 == 0x0409
-  ${OrIf} $1 == 0x0809
-  ${OrIf} $1 == 0x0407
-  ${OrIf} $1 == 0x040C
-  ${OrIf} $1 == 0x0C0C
-    SendMessage $LangEn ${BM_SETCHECK} ${BST_CHECKED} 0
-    StrCpy $LangChosen "en"
+  ; ---- 预选：读系统 UI 语言 ----------------------------------------------
+  ; **坑（实测）**：`System::Call 'user32::GetUserDefaultUILanguage()i.r1'` 在这套
+  ; NSIS 3.11 的 System 插件里取不到函数，$1 拿到的是字符串 "error"，
+  ; 于是原来的 `${If} $1 == 0x0804` 全部落空 → 两颗单选都不选 → LEAVE 拦住不让下一步，
+  ; 表现就是"语言页有但选不了/没预选"。同一个函数在 **kernel32** 的导出里能拿到（2052）。
+  ; 再兜一层：读 `HKCU\Control Panel\International\LocaleName`（本机实测 zh-CN）。
+  ; 两条都拿不到 → 什么都不预选，交给 LEAVE 拦住（她定的口径：读不到必须自己选）。
+  StrCpy $LangChosen ""
+  System::Call 'kernel32::GetUserDefaultUILanguage()i.r1'
+  ${If} $1 != error
+    IntOp $1 $1 & 0x03FF     ; 取主语言号：4=中文 9=英语 7=德语 12=法语 …
+    ${If} $1 == 4
+      StrCpy $LangChosen "zh"
+    ${Else}
+      StrCpy $LangChosen "en"
+    ${EndIf}
   ${Else}
-    ; 认不出来：**两颗都不选**，交给 LEAVE 拦住
-    StrCpy $LangChosen ""
+    ReadRegStr $2 HKCU "Control Panel\International" "LocaleName"
+    ${If} $2 != ""
+      StrCpy $3 $2 2         ; 前两个字母：zh / en / de / fr …
+      ${If} $3 == "zh"
+        StrCpy $LangChosen "zh"
+      ${Else}
+        StrCpy $LangChosen "en"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  ${If} $LangChosen == "zh"
+    SendMessage $LangZh ${BM_SETCHECK} ${BST_CHECKED} 0
+  ${ElseIf} $LangChosen == "en"
+    SendMessage $LangEn ${BM_SETCHECK} ${BST_CHECKED} 0
   ${EndIf}
   !endif
+  ; **这一行是这一页能不能出现的开关。**
+  ; nsDialogs 的 create 函数必须以 `nsDialogs::Show` 结尾（官方每个例子都这么写）。
+  ; 少了它：函数照常执行、控件照常创建（在控件树里能查到，只是全被隐藏），
+  ; 但 NSIS 认为这一页没内容 → **静默跳过**，欢迎页的下一步直接到目录页，
+  ; LEAVE 也不会被调用。编译期零警告零报错，所以 131 第一轮"编译通过"完全没挡住它。
+  ; 她实测反馈「第二页没有语言选项」→ 控件树走查 → 最小复现 → 补上这一行才修好。
+  nsDialogs::Show
 FunctionEnd
 
 Function LangPageLeave
@@ -231,7 +260,9 @@ Function LangPageLeave
   ${EndIf}
 FunctionEnd
 
-Page custom LangPageCreate LangPageLeave "界面语言 / Language"
+; 第 4 个参数是**窗口标题**后缀，NSIS 直接拼在 Caption 后面（不会自动加分隔符），
+; 所以要自己带 ": "，否则标题会变成「MDStar 0.1.0 安装界面语言 / Language」这种连读的字。
+Page custom LangPageCreate LangPageLeave ": 界面语言 / Language"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
