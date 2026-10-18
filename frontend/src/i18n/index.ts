@@ -102,6 +102,18 @@ const en: Record<MsgKey, string> = {
   "win.maximize": "Maximize",
   "win.restore": "Restore",
   "win.close": "Close",
+  "tab.newTabHint": "New tab (blank, ready to type)",
+  "tab.openHint": "Open file (Ctrl+O)",
+  "tab.settingsHint": "Settings (Ctrl+,)",
+  "menu.reveal": "Reveal in Explorer",
+  "tab.dirty": "Unsaved changes",
+  "menu.copyPath": "Copy file path",
+  "menu.closeOthers": "Close others",
+  "menu.closeRight": "Close to the right",
+  "tab.closeTab": "Close tab",
+  "tab.newTab": "New tab",
+  "tab.open": "Open file",
+  "tab.close": "Close",
 };
 
 export { en };

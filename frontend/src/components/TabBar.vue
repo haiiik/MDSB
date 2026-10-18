@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t as msg } from "../i18n";
 import { reactive } from "vue";
 import ThemeToggle from "./ThemeToggle.vue";
 import {
@@ -107,9 +108,9 @@ function onDrop(to: number) {
       @drop="onDrop(i)"
       @dragend="drag.from = -1; drag.over = -1"
     >
-      <span v-if="isDirty(t)" class="tab__dirty" title="有未保存改动" data-testid="tab-dirty">●</span>
+      <span v-if="isDirty(t)" class="tab__dirty" :title="msg('tab.dirty')" data-testid="tab-dirty">●</span>
       <span class="tab__name">{{ t.name }}</span>
-      <button class="tab__close" title="关闭" aria-label="关闭标签" @click.stop="emit('close', t.id)">
+      <button class="tab__close" :title="msg('tab.close')" aria-label="关闭标签" @click.stop="emit('close', t.id)">
         ×
       </button>
     </div>
@@ -120,7 +121,7 @@ function onDrop(to: number) {
     -->
     <button
       class="tabbar__new"
-      title="新增标签（空文档，可直接输入）"
+      :title="msg('tab.newTabHint')"
       aria-label="新增标签"
       data-testid="tab-new"
       @click="createUntitled()"
@@ -136,7 +137,7 @@ function onDrop(to: number) {
     -->
     <button
       class="tabbar__open"
-      title="打开文件 (Ctrl+O)"
+      :title="msg('tab.openHint')"
       aria-label="打开文件"
       data-testid="tab-open"
       @click="getHost() && $emit('open')"
@@ -161,7 +162,7 @@ function onDrop(to: number) {
     -->
     <button
       class="tabbar__settings"
-      title="设置 (Ctrl+,)"
+      :title="msg('tab.settingsHint')"
       aria-label="设置"
       data-testid="open-settings"
       @click="emit('open-settings')"
@@ -179,19 +180,13 @@ function onDrop(to: number) {
 
   <div v-if="menu.open" class="menu-mask" @click="closeMenu" @contextmenu.prevent="closeMenu">
     <ul class="menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @click.stop>
-      <li @click="emit('close', menu.tabId); closeMenu()">关闭标签</li>
-      <li :class="{ 'is-disabled': tabs.list.length < 2 }" @click="tabs.list.length > 1 && doCloseOther()">
-        关闭其他
-      </li>
+      <li @click="emit('close', menu.tabId); closeMenu()">{{ msg('tab.closeTab') }}</li>
+      <li :class="{ 'is-disabled': tabs.list.length < 2 }" @click="tabs.list.length > 1 && doCloseOther()">{{ msg('menu.closeOthers') }}</li>
       <li :class="{ 'is-disabled': !currentTab() || currentTab() === tabs.list[tabs.list.length - 1] }"
-          @click="doCloseRight()">
-        关闭右侧
-      </li>
+          @click="doCloseRight()">{{ msg('menu.closeRight') }}</li>
       <li class="menu__sep" />
-      <li :class="{ 'is-disabled': !currentTab()?.path }" @click="doCopyPath">复制文件路径</li>
-      <li :class="{ 'is-disabled': !getHost()?.capabilities.revealInFolder }" @click="doReveal">
-        在资源管理器中显示
-      </li>
+      <li :class="{ 'is-disabled': !currentTab()?.path }" @click="doCopyPath">{{ msg('menu.copyPath') }}</li>
+      <li :class="{ 'is-disabled': !getHost()?.capabilities.revealInFolder }" @click="doReveal">{{ msg('menu.reveal') }}</li>
     </ul>
   </div>
 </template>
