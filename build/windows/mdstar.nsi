@@ -39,6 +39,7 @@ Unicode true
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
+!include "nsDialogs.nsh"
 
 !define APP      "MDStar"
 !define EXE      "MDStar.exe"
@@ -173,6 +174,59 @@ VIAddVersionKey /LANG=2052 "Comments" "当前用户安装；.md 关联只写 HKC
 !define MUI_COMPONENTSPAGE_SMALLDESC
 
 !insertmacro MUI_PAGE_WELCOME
+; ---------------- 安装期选界面语言（131 追加，她定的口径） ----------------
+; 读系统 UI 语言做预选；**读不到 / 不认识 → 不给默认值，必须选一项才能继续**。
+; 装完写 HKCU\Software\MDStar\Language = zh|en，应用首启拿它当 settings.lang 的初值。
+!define LANGREGKEY "Software\${APP}"
+Var LangZh
+Var LangEn
+Var LangChosen
+
+Function LangPageCreate
+  nsDialogs::Create 1018
+  Pop $0
+  ${NSD_CreateLabel} 0 0 100% 28u "选择 MDStar 的界面语言（装完也能在设置里改）。"
+  Pop $0
+  ${NSD_CreateRadioButton} 12u 40u 80% 14u "中文"
+  Pop $LangZh
+  ${NSD_CreateRadioButton} 12u 62u 80% 14u "English"
+  Pop $LangEn
+
+  ; GetUserDefaultUILanguage：0x0804 简中 / 0x0C04,0x1004,0x0404 繁中（都算中文界面更贴近她的用法）
+  System::Call 'user32::GetUserDefaultUILanguage()i.r1'
+  ${If} $1 == 0x0804
+  ${OrIf} $1 == 0x0C04
+  ${OrIf} $1 == 0x1004
+  ${OrIf} $1 == 0x0404
+    SendMessage $LangZh ${BM_SETCHECK} ${BST_CHECKED} 0
+    StrCpy $LangChosen "zh"
+  ${ElseIf} $1 == 0x0409
+  ${OrIf} $1 == 0x0809
+  ${OrIf} $1 == 0x0407
+  ${OrIf} $1 == 0x040C
+  ${OrIf} $1 == 0x0C0C
+    SendMessage $LangEn ${BM_SETCHECK} ${BST_CHECKED} 0
+    StrCpy $LangChosen "en"
+  ${Else}
+    ; 认不出来：**两颗都不选**，交给 LEAVE 拦住
+    StrCpy $LangChosen ""
+  ${EndIf}
+FunctionEnd
+
+Function LangPageLeave
+  SendMessage $LangZh ${BM_GETCHECK} 0 0 $1
+  SendMessage $LangEn ${BM_GETCHECK} 0 0 $2
+  ${If} $1 == ${BST_CHECKED}
+    StrCpy $LangChosen "zh"
+  ${ElseIf} $2 == ${BST_CHECKED}
+    StrCpy $LangChosen "en"
+  ${Else}
+    MessageBox MB_OK|MB_ICONEXCLAMATION "请选一个界面语言后才能继续。"
+    Abort
+  ${EndIf}
+FunctionEnd
+
+Page custom LangPageCreate LangPageLeave "界面语言 / Language"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
@@ -275,6 +329,8 @@ Section "${APP} 主程序" SecMain
   WriteRegDWORD HKCU "${UNINSTK}" "NoRepair" 1
   WriteRegStr HKCU "${REGKEY}" "InstallDir" "$INSTDIR"
   WriteRegStr HKCU "${REGKEY}" "Version" "${VERSION}"
+  ; 安装期选的语言：应用首启拿它当 settings.lang 的初值（之后以设置为准）
+  WriteRegStr HKCU "${LANGREGKEY}" "Language" "$LangChosen"
 
   ; EstimatedSize 单位是 KB；${GetSize} 把 $0 给成字节/1024 的整数
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
@@ -354,6 +410,7 @@ Section "un.${APP} 本体" UnsecMain
   DeleteRegKey HKCU "${UNINSTK}"
   DeleteRegValue HKCU "${REGKEY}" "TookOverAssoc"
   DeleteRegValue HKCU "${REGKEY}" "InstallDir"
+  DeleteRegValue HKCU "${REGKEY}" "Language"
   DeleteRegValue HKCU "${REGKEY}" "Version"
   !insertmacro SHCNE_ASSOCCHANGED
 SectionEnd
