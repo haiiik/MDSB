@@ -80,6 +80,12 @@ export function createWailsHost(): HostBase {
       await StateService.Set(key, value);
     },
 
+    // 安装器那一页选的语言。Go 侧读注册表，读不到给空串（= 没有安装期意见）。
+    async installLanguage() {
+      const v = await StateService.InstallLanguage();
+      return v === "en" ? "en" : v === "zh" ? "zh" : "";
+    },
+
     async windowMinimise() {
       Window.Minimise();
     },

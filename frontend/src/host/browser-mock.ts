@@ -302,6 +302,17 @@ export function createBrowserMockHost(): HostBase {
       }
     },
 
+    // 浏览器宿主没有注册表：默认空串（= 没有安装期意见）。
+    // E2E 要验"装的时候选了英文"这条链路时，先把 mdsb.mock.installLang 播成 "en"。
+    async installLanguage() {
+      try {
+        const v = localStorage.getItem(LS_PREFIX + "installLang") ?? "";
+        return v === "en" || v === "zh" ? v : "";
+      } catch {
+        return "";
+      }
+    },
+
     async windowMinimise() {
       console.info("[mock host] window.minimise");
     },

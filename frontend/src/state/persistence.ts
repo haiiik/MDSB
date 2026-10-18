@@ -15,7 +15,7 @@ import type { Host } from "../host/types";
 
 export function wirePersistence(h: Host) {
   bindHost(h);
-  void bindSettingsPersistence(h.getState, h.setState);
+  void bindSettingsPersistence(h.getState, h.setState, () => h.installLanguage());
   void bindThemePersistence(h.getState, h.setState);
 
   hooks.afterEdit = (tab: Tab) => {

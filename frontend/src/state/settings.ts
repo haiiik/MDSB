@@ -1,5 +1,5 @@
 import { reactive, ref, watch } from "vue";
-import { setLang, type Lang } from "../i18n";
+import { normalizeLang, setLang, type Lang } from "../i18n";
 
 /**
  * 用户设置。持久化为状态袋里的一条 JSON（`settings.v1`），
@@ -42,23 +42,47 @@ export const settingsOpen = ref(false);
 
 const KEY = "settings.v1";
 
+/**
+ * 首启语言怎么定（纯函数，单独可测）：
+ * 1. 存过的 `lang` 最大 —— 用户在设置里改过一次，之后每次启动都按它，安装期选什么都不再看；
+ * 2. 没存过 → 用安装器那一页写进注册表的值（`installLang`，"zh"/"en"）；
+ * 3. 两个都没有（没装过、直接跑 exe、或注册表读不到）→ 中文。
+ * 存值里的坏字符串按"没存过"处理，不照单全收。
+ */
+export function resolveInitialLang(stored: Partial<Settings> | null, installLang: string): Lang {
+  const fromStore = normalizeLang(stored?.lang);
+  if (fromStore) return fromStore;
+  const fromInstaller = normalizeLang(installLang);
+  return fromInstaller ?? "zh";
+}
+
 let bound = false;
 
 export function bindSettingsPersistence(
   get: (k: string) => Promise<string>,
-  set: (k: string, v: string) => Promise<void>
+  set: (k: string, v: string) => Promise<void>,
+  /** 安装期语言；不传（浏览器/单测）= 没有安装期意见 */
+  installLang: () => Promise<string> = async () => ""
 ) {
   if (bound) return;
   bound = true;
-  void get(KEY).then((raw) => {
-    if (!raw) return;
-    try {
-      Object.assign(settings, JSON.parse(raw) as Partial<Settings>);
-      // 读档后立刻同步一次语言（watch 的 immediate 只能看到默认值）
-      setLang(settings.lang);
-    } catch {
-      /* 坏数据直接忽略，回落默认值 */
+  void Promise.all([
+    get(KEY),
+    // 注册表读不到不该影响启动：兜成空串，让 resolveInitialLang 回落中文
+    installLang().catch(() => ""),
+  ]).then(([raw, installer]) => {
+    let parsed: Partial<Settings> | null = null;
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw) as Partial<Settings>;
+      } catch {
+        parsed = null; // 坏数据直接忽略，回落默认值
+      }
     }
+    if (parsed) Object.assign(settings, parsed);
+    settings.lang = resolveInitialLang(parsed, installer);
+    // 读档后立刻同步一次语言（watch 的 immediate 只能看到默认值）
+    setLang(settings.lang);
   });
   watch(settings, (s) => void set(KEY, JSON.stringify(s)), { deep: true });
 }

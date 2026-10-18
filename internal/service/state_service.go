@@ -120,6 +120,10 @@ func (s *StateService) Platform() string { return runtime.GOOS }
 // AppVersion 返回构建版本号，关于对话框与诊断日志使用。
 func (s *StateService) AppVersion() string { return version }
 
+// InstallLanguage 返回安装器那一页选下的界面语言（"zh" / "en"），没装过或读不到返回空串。
+// 前端只在「settings.v1 里还没存过 lang」时用它当首启初值，用户改过一次就以存值为准。
+func (s *StateService) InstallLanguage() string { return installLanguage() }
+
 // version 由构建脚本注入
 // （-ldflags "-X mdsb/internal/service.version=..."）；源码树默认为 dev。
 var version = "0.1.0-dev"

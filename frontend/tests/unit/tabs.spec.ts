@@ -48,6 +48,7 @@ function fakeHost(files: Record<string, string>): Host & { writes: Array<[string
     pickSaveAs: async () => null,
     assetUrl: async (p: string) => p,
     getState: async () => "",
+    installLanguage: async () => "",
     setState: async () => undefined,
     windowMinimise: async () => undefined,
     windowToggleMaximise: async () => undefined,

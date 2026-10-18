@@ -38,6 +38,7 @@ function makeBase(): HostBase & { store: Map<string, string> } {
     pickSaveAs: async () => null,
     assetUrl: async (p) => p,
     getState: async (k) => store.get(k) ?? "",
+    installLanguage: async () => "",
     setState: async (k, v) => {
       if (v === "") store.delete(k);
       else store.set(k, v);

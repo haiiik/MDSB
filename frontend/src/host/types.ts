@@ -102,6 +102,12 @@ export interface HostBase {
   getState(key: string): Promise<string>;
   setState(key: string, value: string): Promise<void>;
 
+  /**
+   * 安装器那一页选下的界面语言（"zh" / "en"），没装过 / 读不到 / 非桌面 = 空串。
+   * 只在「settings.v1 里还没存过 lang」时用作首启初值，用户改过一次就以存值为准。
+   */
+  installLanguage(): Promise<string>;
+
   // ---- 窗口 ----
   windowMinimise(): Promise<void>;
   windowToggleMaximise(): Promise<void>;

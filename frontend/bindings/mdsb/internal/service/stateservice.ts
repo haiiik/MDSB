@@ -29,6 +29,14 @@ export function Get(key: string): $CancellablePromise<string> {
 }
 
 /**
+ * InstallLanguage 返回安装器那一页选下的界面语言（"zh" / "en"），没装过或读不到返回空串。
+ * 前端只在「settings.v1 里还没存过 lang」时用它当首启初值，用户改过一次就以存值为准。
+ */
+export function InstallLanguage(): $CancellablePromise<string> {
+    return $Call.ByID(1216370208);
+}
+
+/**
  * Platform 返回宿主操作系统标识（windows / darwin / linux），
  * 前端据此区分窗口按钮行为与快捷键修饰键。
  */
