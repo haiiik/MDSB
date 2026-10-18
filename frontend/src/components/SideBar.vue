@@ -248,7 +248,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
 
     <!-- 最近文件 -->
     <div v-if="panel.page === 'recent'" class="sidebar__body" data-testid="recent-list">
-      <p v-if="recent.items.length === 0" class="placeholder">还没有打开过文件</p>
+      <p v-if="recent.items.length === 0" class="placeholder">{{ t("sidebar.emptyRecent") }}</p>
       <!--
         127 第二批（她逐条点的）：
         - **只显示文件名**：目录那一行删了（列表本来就该一眼扫名字，路径靠悬停与右键）；

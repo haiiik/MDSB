@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "../i18n";
 import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 import { hydrate } from "../kernel/hydrate";
 import { mountRender, type WidthPreset } from "../kernel/render";
@@ -378,23 +379,23 @@ function onWheel(e: WheelEvent) {
 
     <!-- 无标签：空态 -->
     <div v-if="!activeTab" class="pane__empty">
-      <h2 class="pane__title">没有打开的文档</h2>
+      <h2 class="pane__title">{{ t("empty.noDoc") }}</h2>
       <!--
         127：空态页给**两颗**按钮。她这句话里「新增一个创建按钮」是要在这张页上有个入口，
         而标签栏那颗 + 已经改成「新增标签」了 —— 两条路都调同一个 `createUntitled`，
         行为（含「复用没动过的空标签」）不会走岔。
       -->
       <div class="pane__empty-actions">
-        <button class="pane__open" data-testid="new-button" @click="createUntitled">新建</button>
+        <button class="pane__open" data-testid="new-button" @click="createUntitled">{{ t("empty.new") }}</button>
         <button class="pane__open pane__open--ghost" data-testid="open-button" @click="$emit('open')">
           打开 Markdown 文件
         </button>
       </div>
-      <p class="placeholder">或按 Ctrl+T 新建、Ctrl+O 打开</p>
+      <p class="placeholder">{{ t("empty.hint") }}</p>
 
       <ul class="pane__checks">
         <li :class="['check', 'check--' + state]">
-          <span class="check__label">宿主自检</span>
+          <span class="check__label">{{ t("empty.hostSelfCheck") }}</span>
           <span class="check__state">
             {{
               state === "pass"

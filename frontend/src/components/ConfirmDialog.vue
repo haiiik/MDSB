@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "../i18n";
 import { dialog, dismissDialog } from "../state/dialogs";
 
 function choose(action: string) {
@@ -21,7 +22,7 @@ function choose(action: string) {
         >
           {{ a }}
         </button>
-        <button class="box__cancel" data-testid="confirm-cancel" @click="dismissDialog()">取消</button>
+        <button class="box__cancel" data-testid="confirm-cancel" @click="dismissDialog()">{{ t("common.cancel") }}</button>
       </div>
     </div>
   </div>

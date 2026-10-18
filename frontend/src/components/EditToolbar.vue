@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "../i18n";
 import { computed, ref, watch } from "vue";
 import type { BlockTarget, ToolbarState } from "../kernel/pm/toolbar";
 
@@ -134,7 +135,7 @@ function applyLink() {
 </script>
 
 <template>
-  <div class="edit-toolbar" data-testid="edit-toolbar" role="toolbar" aria-label="格式工具栏">
+  <div class="edit-toolbar" data-testid="edit-toolbar" role="toolbar" :aria-label="t('toolbar.aria')">
     <button
       v-for="item in ITEMS"
       :key="item.id"
@@ -183,7 +184,7 @@ function applyLink() {
         <button
           class="edit-toolbar__btn"
           data-testid="tb-link-clear"
-          title="清除选区的链接"
+          :title="t('toolbar.clearLink')"
           type="button"
           @click="emit('link', '')"
         >
@@ -200,7 +201,7 @@ function applyLink() {
         <select
           class="edit-toolbar__select"
           data-testid="tb-fontsize"
-          title="编辑档正文字号（阅读档请用缩放）"
+          :title="t('toolbar.fontSize')"
           :value="fontSize"
           @change="onFontSize"
         >

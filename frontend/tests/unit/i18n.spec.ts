@@ -28,6 +28,15 @@ describe("i18n 基座", () => {
     expect(normalizeLang(null)).toBeNull();
   });
 
+  it("字典文件里没有重复 key（第八步真的撞过：同名 key 写两遍，TS 报 TS1117）", async () => {
+    for (const f of ["../../src/i18n/zh.ts", "../../src/i18n/index.ts"]) {
+      const text = await import("node:fs/promises").then((fs) => fs.readFile(new URL(f, import.meta.url), "utf8"));
+      const keys = [...text.matchAll(/^  "([^"]+)":/gm)].map((m) => m[1]);
+      const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
+      expect(dup, f + " 重复 key").toEqual([]);
+    }
+  });
+
   it("非法语言不许切（切了还是原语言）", () => {
     setLang("en");
     setLang("fr" as never);

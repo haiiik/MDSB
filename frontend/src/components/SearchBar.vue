@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "../i18n";
 import { computed, nextTick, ref, watch } from "vue";
 import { formatCount } from "../kernel/search";
 import {
@@ -91,7 +92,7 @@ watch(
         data-testid="search-input"
         type="text"
         :value="search.query"
-        placeholder="查找"
+        :placeholder="t('search.find')"
         spellcheck="false"
         @input="setSearchQuery(($event.target as HTMLInputElement).value)"
       />
@@ -102,10 +103,10 @@ watch(
       >
         {{ count }}
       </span>
-      <button title="上一个 (Shift+Enter)" data-testid="search-prev" :disabled="!search.matches.length" @click="gotoMatch(-1)">
+      <button :title="t('search.prev')" data-testid="search-prev" :disabled="!search.matches.length" @click="gotoMatch(-1)">
         ↑
       </button>
-      <button title="下一个 (Enter)" data-testid="search-next" :disabled="!search.matches.length" @click="gotoMatch(1)">
+      <button :title="t('search.next')" data-testid="search-next" :disabled="!search.matches.length" @click="gotoMatch(1)">
         ↓
       </button>
       <span class="searchbar__sep" />
@@ -124,13 +125,13 @@ watch(
         v-if="canReplace"
         class="searchbar__opt"
         :class="{ 'is-on': search.withReplace }"
-        title="展开 / 收起替换（Ctrl+H 直接展开）"
+        :title="t('search.replaceToggle')"
         data-testid="search-toggle-replace"
         @click="onToggleReplace"
       >
         替换
       </button>
-      <button class="searchbar__close" title="关闭 (Esc)" data-testid="search-close" @click="closeSearch()">×</button>
+      <button class="searchbar__close" :title="t('search.close')" data-testid="search-close" @click="closeSearch()">×</button>
     </div>
 
     <div v-if="canReplace && search.withReplace" class="searchbar__row">
@@ -140,7 +141,7 @@ watch(
         data-testid="replace-input"
         type="text"
         :value="search.replacement"
-        placeholder="替换为"
+        :placeholder="t('search.replaceWith')"
         spellcheck="false"
         @keydown="onReplaceKeydown"
         @input="search.replacement = ($event.target as HTMLInputElement).value"
