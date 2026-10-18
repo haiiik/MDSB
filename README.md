@@ -10,13 +10,13 @@
 
 ## 截图
 
-| 阅读模式 | 编辑模式 | Mermaid 渲染 | 表格与代码块 |
+| 阅读模式 | 编辑模式 | Mermaid 渲染 | 代码块 |
 | --- | --- | --- | --- |
-| <img src="https://github.com/user-attachments/assets/3e854711-076c-4f9d-a7b8-051fe2c876f3" alt="01-read" width="260"> | <img src="https://github.com/user-attachments/assets/29b2b492-b974-4be7-9681-970449243ae9" alt="02-edit" width="260"> | <img src="https://github.com/user-attachments/assets/fca441ac-ce8c-4bf7-a29c-bff2b9ffbe89" alt="03-mermaid" width="260"> | <img src="https://github.com/user-attachments/assets/512501a6-1f88-4c4e-8ee9-af73e12c589b" alt="04-table-code" width="260"> |
+| <img src="docs/screenshots/01-read.png" alt="01-read" width="260"> | <img src="docs/screenshots/02-edit.png" alt="02-edit" width="260"> | <img src="docs/screenshots/03-mermaid.png" alt="03-mermaid" width="260"> | <img src="docs/screenshots/04-code-block.png" alt="04-code-block" width="260"> |
 
 **深浅两档主题**（点标签栏齿轮右侧那颗日/月开关）：
 
-<img src="https://github.com/user-attachments/assets/a1284159-952d-4876-8ebc-9b285a8b14fe" alt="深浅主题切换" width="760">
+<img src="docs/screenshots/theme-toggle.gif" alt="深浅主题切换" width="760">
 
 ## 功能清单
 

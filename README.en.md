@@ -12,13 +12,13 @@ Built from scratch, runs fully offline in a single executable.
 
 > UI screenshots are in Chinese; an English interface is on the roadmap.
 
-| Reading | Editing | Mermaid | Tables & code |
+| Reading | Editing | Mermaid | Code block |
 | --- | --- | --- | --- |
-| <img src="https://github.com/user-attachments/assets/3e854711-076c-4f9d-a7b8-051fe2c876f3" alt="reading" width="260"> | <img src="https://github.com/user-attachments/assets/29b2b492-b974-4be7-9681-970449243ae9" alt="editing" width="260"> | <img src="https://github.com/user-attachments/assets/fca441ac-ce8c-4bf7-a29c-bff2b9ffbe89" alt="mermaid" width="260"> | <img src="https://github.com/user-attachments/assets/512501a6-1f88-4c4e-8ee9-af73e12c589b" alt="tables and code" width="260"> |
+| <img src="docs/screenshots/01-read.png" alt="reading" width="260"> | <img src="docs/screenshots/02-edit.png" alt="editing" width="260"> | <img src="docs/screenshots/03-mermaid.png" alt="mermaid" width="260"> | <img src="docs/screenshots/04-code-block.png" alt="code block" width="260"> |
 
 **Light and dark themes** (the sun / moon toggle right of the gear in the tab bar):
 
-<img src="https://github.com/user-attachments/assets/a1284159-952d-4876-8ebc-9b285a8b14fe" alt="theme switch" width="760">
+<img src="docs/screenshots/theme-toggle.gif" alt="theme switch" width="760">
 
 ## Features
 
