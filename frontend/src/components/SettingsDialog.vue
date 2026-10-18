@@ -18,15 +18,15 @@ function close() {
   <div v-if="settingsOpen" class="mask" data-testid="settings-dialog" @click.self="close">
     <div class="box" role="dialog" aria-modal="true">
       <header class="box__head">
-        <h3>设置</h3>
+        <h3>{{ t("dialog.settings") }}</h3>
         <button class="box__x" data-testid="settings-close" @click="close">×</button>
       </header>
 
       <div class="rows">
         <label class="row">
           <span class="row__label">
-            自动保存
-            <small class="row__hint">开启后停止输入 1 秒落盘；关闭时只用 Ctrl+S</small>
+            {{ t("settings.autoSave") }}
+            <small class="row__hint">{{ t("settings.autoSaveHint") }}</small>
           </span>
           <input v-model="settings.autoSave" type="checkbox" data-testid="setting-autosave" />
         </label>
@@ -37,8 +37,8 @@ function close() {
 
         <label class="row">
           <span class="row__label">
-            代码块行号
-            <small class="row__hint">只影响阅读与编辑时的显示，不改动文档内容</small>
+            {{ t("settings.codeLineNumbers") }}
+            <small class="row__hint">{{ t("settings.codeLineNumbersHint") }}</small>
           </span>
           <input v-model="settings.codeLineNumbers" type="checkbox" data-testid="setting-linenumbers" />
         </label>
@@ -57,7 +57,7 @@ function close() {
       </div>
 
       <p class="note">
-        设置立即生效并自动记住。
+        {{ t("settings.appliesNote") }}
         <!-- 130：版本信息留在这儿（底栏那条已删），但只写「产品名 · 版本」，不再报宿主与平台 -->
         <span class="note__ver" data-testid="setting-version">MDStar v{{ version }}</span>
       </p>

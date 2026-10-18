@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, computed, ref } from "vue";
 import { getHost } from "../state/documents";
 import { confirmQuit } from "../state/quit";
 import { view } from "../state/view";
+import { t } from "../i18n";
 
 /**
  * 外壳改造后的顶栏：只剩**品牌、拖动区、窗口三键**。
@@ -104,13 +105,13 @@ function onCaptionUp(e: PointerEvent) {
     />
 
     <div class="topbar__win">
-      <button title="最小化" data-testid="win-min" @click="winMinimise">
+      <button :title="t('win.minimize')" data-testid="win-min" @click="winMinimise">
         <span class="win-icon win-icon--min" aria-hidden="true" />
       </button>
-      <button :title="maximised ? '还原' : '最大化'" data-testid="win-max" @click="winToggleMaximise">
+      <button :title="maximised ? t('win.restore') : t('win.maximize')" data-testid="win-max" @click="winToggleMaximise">
         <span class="win-icon" :class="maximised ? 'win-icon--restore' : 'win-icon--max'" aria-hidden="true" />
       </button>
-      <button class="is-close" title="关闭" data-testid="win-close" @click="winClose">
+      <button class="is-close" :title="t('win.close')" data-testid="win-close" @click="winClose">
         <span class="win-icon win-icon--close" aria-hidden="true" />
       </button>
     </div>

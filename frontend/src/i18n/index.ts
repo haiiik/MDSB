@@ -92,6 +92,16 @@ const en: Record<MsgKey, string> = {
   "status.closeHint": "Dismiss this message",
   "status.dirty": "Unsaved changes",
   "status.statsTitle": "{cjk} CJK + {latin} words; code blocks and inline code excluded",
+  "dialog.settings": "Settings",
+  "settings.appliesNote": "Changes apply immediately and are remembered.",
+  "settings.autoSave": "Auto save",
+  "settings.autoSaveHint": "Writes 1 second after you stop typing; when off, only Ctrl+S saves",
+  "settings.codeLineNumbers": "Code block line numbers",
+  "settings.codeLineNumbersHint": "Display only — your document content is untouched",
+  "win.minimize": "Minimize",
+  "win.maximize": "Maximize",
+  "win.restore": "Restore",
+  "win.close": "Close",
 };
 
 export { en };

@@ -18,6 +18,8 @@ test("设置里选 English → 对话框自身文案立刻换英文（改语言�
   await expect(page.getByText("界面语言")).toHaveCount(0);
   // 结构没动：切语言不许把判据的落脚点一起换掉
   await expect(page.getByTestId("setting-lang")).toHaveValue("en");
+  // 顶栏窗口三键的提示也换了（title 是给人看的，属于界面文案）
+  await expect(page.getByTestId("win-close")).toHaveAttribute("title", "Close");
 });
 
 test("切回中文；未打开文档的提示两档都对", async ({ page }) => {
