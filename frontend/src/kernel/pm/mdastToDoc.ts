@@ -2,6 +2,7 @@ import { Node as PMNode, type Mark, type Schema } from "prosemirror-model";
 import { tf } from "../../i18n";
 import { parseMd } from "../md";
 import { splitFootnoteDef } from "./footnoteBlock";
+import { splitInlineMath, splitMathBlock } from "./mathBlock";
 import { hpSchema } from "./schema";
 
 /**
@@ -125,6 +126,10 @@ function convertInline(node: AnyNode, schema: Schema, marks: readonly Mark[], so
     case "break":
       return [schema.nodes.hard_break.create()];
 
+    /**
+     * 136-B：引用还是"原文说了算" —— raw 在就按 raw 落地（她没法在编辑模式改引用文字，
+     * 改了 label 也只会让引用和定义接不上），拿不到 raw 才按 label 现拼一个。
+     */
     case "footnoteReference": {
       // 136-B：不再是"看得到动不了的占位"，而是带 label、可点跳转的行内原子。
       // raw 仍然留着 —— 回写时按原文落地，label 只用于跳转与识别。
@@ -132,21 +137,34 @@ function convertInline(node: AnyNode, schema: Schema, marks: readonly Mark[], so
       return [schema.nodes.footnote_ref.create({ label, raw: rawOf(source, node) })];
     }
 
+    /**
+     * 138-B：行内公式 `$…$` 从占位升级成**可就地编辑**的节点。
+     * 定界符不进 DOM（伪元素画），拆出来的 `before/after` 存属性，回写时由
+     * `joinInlineMath` 拼回原串 —— 她能改的只有正文。
+     * 拆不开的形状（手写得很怪、或粘贴来根本没有源区间又缺 value）回落成占位：
+     * **宁可不能改，也不能改坏她的文件。**
+     */
+    case "inlineMath": {
+      const raw = rawOf(source, node);
+      const parts = splitInlineMath(raw);
+      if (!parts) {
+        return [
+          schema.nodes.opaque_inline.create({
+            label: tf("math.opaqueInline", { src: "$" + String(node.value ?? "") + "$" }),
+            raw,
+          }),
+        ];
+      }
+      return [
+        schema.nodes.math_inline.create(
+          { before: parts.before, after: parts.after },
+          parts.value ? schema.text(parts.value) : undefined
+        ),
+      ];
+    }
+
     case "html":
       return [schema.nodes.opaque_inline.create({ label: "（HTML）", raw: rawOf(source, node) })];
-
-    /**
-     * 138-A：行内公式此刻是占位（138-B 做成就地可编辑）。
-     * 与块级同理：**label 里必须带她的原文**，否则编辑模式比没做这个功能之前更难读
-     * —— 以前 `$E=mc^2$` 就是看得见的一段文字。
-     */
-    case "inlineMath":
-      return [
-        schema.nodes.opaque_inline.create({
-          label: tf("math.opaqueInline", { src: "$" + String(node.value ?? "") + "$" }),
-          raw: rawOf(source, node),
-        }),
-      ];
 
     default:
       return [schema.nodes.opaque_inline.create({ label: `（${node.type}）`, raw: rawOf(source, node) })];
@@ -268,6 +286,27 @@ function convertBlock(node: AnyNode, schema: Schema, source: string): PMNode[] {
     case "tableRow":
       // 单独走到这里时（非表格内的手工构造）无从判断表头，按数据行处理
       return [convertRow(node, schema, node.header === true, source)];
+
+    /**
+     * 138-B：块级公式 `$$…$$` 升级成**可就地编辑**的节点（此前是不透明块）。
+     *
+     * 拆出来的 `before`（缩进 + 开定界符 + 其后空白）与 `after`（其前空白 + 闭定界符 + 行尾）
+     * 存属性，正文进内容 —— 她能改的只有正文，骨架由 `joinMathBlock` 原样带回去。
+     * **拆不开就回落成不透明块**：宁可不能改，也不能改坏她的文件（与 136-B 同一条纪律）。
+     */
+    case "math": {
+      const raw = rawOf(source, node);
+      const parts = splitMathBlock(raw);
+      if (!parts) {
+        return [schema.nodes.opaque_block.create({ label: opaqueLabelFor(node), raw })];
+      }
+      return [
+        schema.nodes.math_block.create(
+          { before: parts.before, after: parts.after },
+          parts.value ? schema.text(parts.value) : undefined
+        ),
+      ];
+    }
 
     case "footnoteDefinition": {
       // 136-B：定义块**可以就地改正文**了（此前是不透明块）。

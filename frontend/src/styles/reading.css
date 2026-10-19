@@ -872,3 +872,78 @@
 .hp-doc .hp-math--block.hp-math--error {
   text-align: left;
 }
+
+/* ---------- 138-B 公式（编辑模式） ----------
+ * 与 109/110 代码块 + Mermaid 同一套视觉语言：**上面排版、下面源码**，
+ * 定界符是语法骨架，一律用伪元素按属性画，不进 DOM（136-B 的教训：进 DOM 就会被打字吃进去）。 */
+.hp-doc .hp-mathblock {
+  margin: 0.6em 0;
+  padding: 6px 8px;
+  border: 1px solid var(--hp-border);
+  border-radius: 8px;
+  background: var(--hp-code-bg, rgba(127, 127, 127, 0.06));
+}
+
+.hp-doc .hp-mathblock.is-selected {
+  border-color: var(--hp-accent);
+}
+
+.hp-doc .hp-mathblock__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--hp-text-weak);
+}
+
+.hp-doc .hp-mathblock__hint.is-warn {
+  color: var(--hp-danger, #c0392b);
+}
+
+.hp-doc .hp-mathblock__preview {
+  /* 长公式宁可横向滚，也不许撑破正文宽度 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 2px;
+  text-align: center;
+}
+
+.hp-doc .hp-mathblock__preview[data-state="error"] {
+  text-align: left;
+  color: var(--hp-danger, #c0392b);
+}
+
+.hp-doc .hp-mathblock__preview[data-state="pending"] {
+  color: var(--hp-text-weak);
+}
+
+.hp-doc .hp-mathblock__src {
+  margin: 4px 0 0;
+  padding: 4px 6px;
+  border-top: 1px dashed var(--hp-border);
+  font-family: var(--hp-font-md);
+  font-size: 0.92em;
+  white-space: pre-wrap;
+  /* 源码是「能改的文字」，底色不能跟代码块一样沉，否则看着像只读 */
+  background: transparent;
+}
+
+/* 行内公式：$…$ 由伪元素按属性画，正文在中间可编辑 */
+.hp-doc .hp-mathinline::before {
+  content: attr(data-hp-math-left);
+  color: var(--hp-text-weak);
+}
+
+.hp-doc .hp-mathinline::after {
+  content: attr(data-hp-math-right);
+  color: var(--hp-text-weak);
+}
+
+.hp-doc .hp-mathinline {
+  font-family: var(--hp-font-md);
+  padding: 0 1px;
+  border-radius: 3px;
+  background: rgba(127, 127, 127, 0.09);
+  white-space: pre-wrap;
+}

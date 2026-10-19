@@ -117,6 +117,7 @@ const zh = {
   "footnotes.backTo": "返回正文里的引用 {n}",
 
   "math.errorTip": "公式语法错误，未渲染：",
+  "math.editHint": "公式 · 在下面改源码，上面实时预览",
   "math.opaqueInline": "公式 {src}",
   "math.opaqueBlock": "公式 {src} · 编辑模式暂不修改",
 

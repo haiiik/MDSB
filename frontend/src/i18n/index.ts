@@ -172,6 +172,7 @@ const en: Record<MsgKey, string> = {
   "footnotes.title": "Footnotes",
   "footnotes.backTo": "Back to reference {n}",
   "math.errorTip": "Formula not rendered (syntax error): ",
+  "math.editHint": "Formula · edit the source below, preview updates live",
   "math.opaqueInline": "formula {src}",
   "math.opaqueBlock": "formula {src} · not editable here yet",
   "toolbar.doclink": "Doc link",

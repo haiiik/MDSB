@@ -84,21 +84,94 @@ test("只是在阅读模式里看了一眼，不该把文档改成未保存", as
 });
 
 /**
- * 138-A 阶段公式在编辑模式还是**占位**（138-B 才做成「预览 + 就地改源码」），
- * 但占位必须带着她的原文 —— 这条是桌面第 17 段逼出来的：
- * 第一版 label 写的是 `（inlineMath）`，等于"做了公式功能之后编辑模式反而更难读"
- * （没做之前 `$E=mc^2$` 就是看得见的一段普通文字）。
+ * 138-B：编辑模式里公式是**可就地编辑的节点**。
+ *
+ * 定界符由 CSS 伪元素按 `data-hp-math-left/right` 画，**不在 DOM 文字里** ——
+ * 这条纪律是 136-B 用真缺陷换来的（装饰进 DOM 就会被 PM 的 domAtPos 认成内容区，打字落进标记）。
+ * 所以这里判的是：属性带着定界符、正文改得动、界面上仍然看得见 `$`（伪元素），
+ * 而 138-A 那条「占位里看得见原文」的判据已经升级成「节点本身就能改」——
+ * 更难读的那种状态（label 写 `（inlineMath）`）不会再回来，这条也在钉它。
  */
-test("编辑模式：公式占位里看得见原文，不是类型名黑话", async ({ page }) => {
+test("编辑模式：块级公式上面排版、下面能改源码", async ({ page }) => {
   await waitHydrated(page);
   await setMode(page, "edit");
-  const editor = page.locator(".ProseMirror");
-  await expect(editor).toBeVisible();
-  const 文本 = (await editor.textContent()) ?? "";
-  expect(文本).toContain("$E=mc^2$");
-  expect(文本).toContain("$$x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$");
-  expect(文本).not.toContain("（inlineMath）");
-  expect(文本).not.toContain("（math）");
-  // 占位不许被改成"可编辑文字"：改档保存后文件仍然是原文（字节判据在单元/保真矩阵里）
-  await expect(page.getByTestId("opaque-block").first()).toBeVisible();
+  const block = page.getByTestId("pm-math-block");
+  await expect(block).toHaveCount(1);
+  const src = page.getByTestId("pm-math-src");
+  // 预览区是 NodeView 自己建的，testid 只在这一条上，所以限定在块里找
+  const preview = block.getByTestId("pm-math-preview");
+  await expect(src).toHaveCount(1);
+  // 源码区里只有正文：`$$` 不进 DOM 文字
+  await expect(src).not.toContainText("$$");
+  await expect(src).toContainText("\\frac{-b");
+
+  // 改一个字 → 上面的预览跟着变。
+  // **先等"变成了什么"（β 出现），再看状态**：打字之前 `data-state` 就已经是 `done`，
+  // 拿它当起点判据会当场成立、读到旧渲染（桌面第 17 段就是这么假红的）。
+  await src.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" \\beta");
+  await expect(preview).toContainText("β", { timeout: 20_000 });
+  await expect(preview).toHaveAttribute("data-state", "done");
+});
+
+test("编辑模式：把公式改坏 → 退回原文 + 提示行报错，源码仍可继续改", async ({ page }) => {
+  await waitHydrated(page);
+  await setMode(page, "edit");
+  const src = page.getByTestId("pm-math-src");
+  await src.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type("\\typeout{x}");
+  const preview = page.getByTestId("pm-math-block").getByTestId("pm-math-preview");
+  await expect(preview).toHaveAttribute("data-state", "error", { timeout: 20_000 });
+  // 降级三件事：原文还看得见、报错说得出来、源码框仍可编辑（004 那条口径）
+  await expect(preview).toContainText("\\typeout{x}");
+  await expect(page.getByTestId("pm-math-hint")).toContainText("公式语法错误");
+  await expect(src).toBeEditable();
+});
+
+test("编辑模式：行内公式可点进去改，定界符不在文字里", async ({ page }) => {
+  await waitHydrated(page);
+  await setMode(page, "edit");
+  const 行内 = page.getByTestId("pm-math-inline");
+  // 夹具里 5 处行内（4 条好公式 + 那条故意写坏的）：写坏的在编辑模式**照样是可改的正文**，
+  // 报错只在阅读模式的预览里出现 —— 编辑模式不该因为渲染失败就把字锁住。
+  await expect(行内).toHaveCount(5);
+  await expect(行内.first()).toHaveText("E=mc^2");
+  await expect(行内.first()).toHaveAttribute("data-hp-math-left", "$");
+  await expect(行内.first()).toHaveAttribute("data-hp-math-right", "$");
+  // 点进去打字，字落在正文里而不是标记里（136-B 那个坑的行内版）。
+  // **落点用 DOM Range 显式放进这个节点内部**，不靠"点击 + End"：
+  // `End` 跳的是**点击所在那一行的行尾**，这里那一行是整段话，光标会跑到句号后面
+  // （105/106 就记过这条，拿它当靶心会误判"没改进公式"）。
+  await 行内.first().evaluate((el) => {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(false);
+    const s = window.getSelection();
+    s?.removeAllRanges();
+    s?.addRange(r);
+  });
+  await page.keyboard.type("!");
+  await expect(行内.first()).toHaveText("E=mc^2!");
+});
+
+test("编辑模式改完保存：只有动过的那一处变化，其余逐字节不动", async ({ page }) => {
+  await waitHydrated(page);
+  await setMode(page, "edit");
+  const src = page.getByTestId("pm-math-src");
+  await src.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" \\beta");
+  await page.keyboard.press("Control+s");
+  await expect(page.getByTestId("tab-dirty")).toHaveCount(0);
+  const 存 = await page.evaluate(
+    (p) => (window as unknown as { __hpMockReadFile?: (a: string) => string | null }).__hpMockReadFile!(p),
+    DOC
+  );
+  // 块级只在末尾多了 ` \beta`；`$$` 三行式与别处一个字节没动
+  expect(存).toContain("$$\nx = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} \\beta\n$$");
+  expect(存).toContain("行内一句：质能 $E=mc^2$ 与勾股 $a^2+b^2=c^2$ 混排，后面还有**粗体**。");
+  expect(存).toContain("求和与积分：$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$，$\\int_0^1 x\\,dx$。");
+  expect(存).toContain("坏公式这条应当降级但看得见：$\\typeout{x}$ 收尾。");
 });

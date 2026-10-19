@@ -171,6 +171,35 @@ function decodeSource(el: HTMLElement): string {
   }
 }
 
+/**
+ * 把一个元素"涂"成公式渲染结果：成功就填 KaTeX 的真 DOM 子树，
+ * 失败就退回**带定界符的原文**并把 `data-state` 标成 `error`。
+ *
+ * 这是 138-B 编辑模式 NodeView 用的入口（阅读模式那边是 `hydrateMath` 一次处理一片）。
+ * 两条路共用同一份渲染与降级逻辑，不各写一遍 —— 各写一遍早晚在降级口径上写岔。
+ * 调用方负责防抖（见 `nodeViews.ts` 的 `mathBlockNodeView`）。
+ */
+export async function paintMath(
+  target: HTMLElement,
+  src: string,
+  display: boolean
+): Promise<{ state: "done" } | { state: "error"; error: string }> {
+  const rt = await getRuntime();
+  const r = renderMath(rt, src, display);
+  if (!rt) {
+    // 运行时取不到（磁盘缺 chunk / 首次加载失败）：**停在原文态**，不炸整页、也不假装渲染好了
+    target.textContent = (display ? "$$" : "$") + src + (display ? "$$" : "$");
+    return { state: "error", error: r.ok ? "" : r.error };
+  }
+  if (!r.ok) {
+    // 降级：原文仍然看得见（与阅读模式同一个口径），错误说明留给调用方放在提示行上
+    target.textContent = (display ? "$$" : "$") + src + (display ? "$$" : "$");
+    return { state: "error", error: r.error };
+  }
+  fillKatex(rt, target, r.html);
+  return { state: "done" };
+}
+
 /** 错误消息可能多行（KaTeX 会把「出错位置」再铺一段），提示里只要第一句 */
 function firstLine(s: string): string {
   return s.split("\n")[0].trim();
@@ -213,19 +242,24 @@ export async function hydrateMath(root: HTMLElement): Promise<number> {
     }
     // KaTeX 的产出解析成真 DOM 再插入：与 md.ts 那侧同一个理由（不开 allowDangerousHtml，
     // 也全项目不在用户可见内容上写 innerHTML）
-    const frag: Root = rt.fromHtml(r.html, { fragment: true });
     el.classList.remove("hp-math--pending");
     // testid 从「占位待水合」换成「已渲出来」：判据要能区分这两态，
     // 否则"水合根本没跑"与"水合跑了"在 DOM 上长得一样（第一次跑 e2e 就是这么静默过去的）。
     el.setAttribute("data-testid", "hp-math");
-    el.textContent = "";
-    for (const child of frag.children) {
-      const dom = hastToDom(child);
-      if (dom) el.append(dom);
-    }
+    fillKatex(rt, el, r.html);
     done++;
   }
   return done;
+}
+
+/** KaTeX 的 HTML → 真 DOM 子树（先清空 target）。水合与编辑模式的 NodeView 共用这一份 */
+function fillKatex(rt: MathRuntime, target: HTMLElement, html: string): void {
+  const frag: Root = rt.fromHtml(html, { fragment: true });
+  target.textContent = "";
+  for (const child of frag.children) {
+    const dom = hastToDom(child);
+    if (dom) target.append(dom);
+  }
 }
 
 /**

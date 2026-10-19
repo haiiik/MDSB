@@ -182,6 +182,24 @@ test("文档目录含中文与空格时，相对引用照样能被阅读模式�
 test("光标在代码块里粘图 → 说清楚原因，且不留下指向空气的引用", async ({ page }) => {
   await seedAndOpen(page, "# 图\n\n```js\nconst a = 1;\n```\n\n末段不动。\n", "/demo/粘贴图片-5.md");
   await page.locator(".ProseMirror pre code").click();
+  /**
+   * **等选区真的落到代码块里再粘。**
+   *
+   * `handlePaste` 读的是 `state.selection`，而"点击 → PM 把选区收进来"之间隔着一帧；
+   * 机器不忙时赶得上，忙的时候就输了 —— 输了之后选区还在**文档开头**（标题那一段容得下图片），
+   * 于是图被插在围栏外面，判据报「图片数 1 ≠ 0」，
+   * 看着像"schema 拒绝逻辑失效"，其实是测试 paste 早了。空机上单跑也会红，
+   * 说明这不是并行才有的问题（2026-10-19 就是这样查了半天）。
+   */
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const n = window.getSelection()?.anchorNode ?? null;
+        const el = n ? (n.nodeType === 3 ? n.parentElement : (n as HTMLElement)) : null;
+        return !!el && !!el.closest(".hp-codebox pre code");
+      })
+    )
+    .toBe(true);
   await pasteImage(page, PNG);
 
   // 109 的代码块是 NodeView，行内只收纯文本：PM 的默认做法会把块从光标处劈开

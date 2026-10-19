@@ -5,7 +5,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import { describe, expect, it } from "vitest";
 import { serializeMd } from "../../src/kernel/md";
 import { docToMdast } from "../../src/kernel/pm/docToMdast";
-import { mdastToDoc } from "../../src/kernel/pm/mdastToDoc";
+import { mdastToDoc, mdastRootToNodes } from "../../src/kernel/pm/mdastToDoc";
 import { hpSchema } from "../../src/kernel/pm/schema";
 
 /**
@@ -173,43 +173,70 @@ describe("夹具全量能转成非空文档", () => {
   });
 });
 
-describe("138-A：公式在编辑模式还是占位，但**原文必须看得见**", () => {
+describe("138-B：公式在编辑模式是可就地编辑的节点，定界符是骨架不是文字", () => {
   const MD = "行内 $E=mc^2$ 结束。\n\n$$\nx = \\frac{1}{2}\n$$\n";
 
-  it("行内公式 → opaque_inline，label 里带着 `$E=mc^2$`，raw 是原文", () => {
+  it("行内公式 → math_inline：正文在内容里，定界符存属性", () => {
     const doc = mdastToDoc(MD, hpSchema);
     let 行内: PMNode | null = null;
     doc.descendants((n) => {
-      if (n.type.name === "opaque_inline") 行内 = n;
+      if (n.type.name === "math_inline") 行内 = n;
       return true;
     });
-    expect(行内, "行内公式没落成占位").not.toBeNull();
-    const attrs = (行内 as unknown as PMNode).attrs as { label: string; raw: string };
-    // 这条判据是桌面实测第 17 段逼出来的：以前 label 只写 `（inlineMath）`，
-    // 等于做了公式功能之后**编辑模式反而更难读**（没做之前那就是普通文字）。
-    expect(attrs.label).toContain("$E=mc^2$");
-    expect(attrs.raw).toBe("$E=mc^2$");
+    expect(行内, "行内公式没升级成 math_inline").not.toBeNull();
+    const node = 行内 as unknown as PMNode;
+    const attrs = node.attrs as { before: string; after: string };
+    expect(attrs.before).toBe("$");
+    expect(attrs.after).toBe("$");
+    // 正文就是她能改的那一段（定界符不在 textContent 里 —— 它在 DOM 里也不该出现，见下条）
+    expect(node.textContent).toBe("E=mc^2");
   });
 
-  it("块级公式 → opaque_block，label 带原文、raw 是那三行", () => {
+  it("块级公式 → math_block，带源区间；骨架（三行式 `$$`）存在属性上", () => {
     const names = types(MD);
-    expect(names).toContain("opaque_block");
+    expect(names).toEqual(["paragraph", "math_block"]);
     const doc = mdastToDoc(MD, hpSchema);
-    let 块: PMNode | null = null;
-    doc.forEach((n) => {
-      if (n.type.name === "opaque_block") 块 = n;
-    });
-    const attrs = (块 as unknown as PMNode).attrs as { label: string; raw: string };
-    expect(attrs.raw).toBe("$$\nx = \\frac{1}{2}\n$$");
-    expect(attrs.label).toContain("x = \\frac{1}{2}");
+    const 块 = doc.child(1);
+    const attrs = 块.attrs as { before: string; after: string; srcFrom: number; srcTo: number };
+    expect(块.type.name).toBe("math_block");
+    expect(attrs.before).toBe("$$\n");
+    expect(attrs.after).toBe("\n$$");
+    expect(块.textContent).toBe("x = \\frac{1}{2}");
+    // 103：顶层块要盖上源区间，回写按块拼接才找得到它
+    expect(typeof attrs.srcFrom).toBe("number");
+    expect(MD.slice(attrs.srcFrom, attrs.srcTo)).toBe("$$\nx = \\frac{1}{2}\n$$");
   });
 
-  it("占位写回走 raw，label 里那句说明**不会进她的文件**", () => {
+  it("定界符**不在 DOM 文字里**（伪元素画的），打字不会落进标记", () => {
+    // 136-B 的同一条教训：装饰文字进 DOM 就会被 PM 的 domAtPos 认成内容区。
+    // toDOM 里只许有 data-hp-math-left/right 这两个"给 CSS 看的属性"。
+    const doc = mdastToDoc("行内 $E=mc^2$ 结束。\n", hpSchema);
+    const spec = doc.toJSON();
+    const 串 = JSON.stringify(spec);
+    expect(串).toContain("math_inline");
+    // JSON 里没有以文字形态存在的 `$`（定界符只在 attrs.before/after 这两个属性值里）
+    expect(doc.child(0).textContent).toBe("行内 E=mc^2 结束。");
+  });
+
+  it("写回逐字节：定界符个数、`$$` 三行式都不许被 remark 的序列化器重排", () => {
     const doc = mdastToDoc(MD, hpSchema);
     const out = serializeMd(docToMdast(doc) as never);
-    expect(out).toContain("$E=mc^2$");
-    expect(out).toContain("$$\nx = \\frac{1}{2}\n$$");
-    expect(out).not.toContain("编辑模式");
-    expect(out).not.toContain("公式 $E=mc^2$");
+    expect(out).toBe(MD);
+  });
+
+  it("单行 `$$E=mc^2$$` 升级后仍然原样写回（remark 会把它规范成 `$…$`，我们不走那条路）", () => {
+    const SRC = "质能方程：$$E=mc^2$$ 收尾。\n";
+    const doc = mdastToDoc(SRC, hpSchema);
+    const attrs = (doc.child(0).child(1) as PMNode).attrs as { before: string; after: string };
+    expect(attrs.before).toBe("$$");
+    expect(attrs.after).toBe("$$");
+    expect(serializeMd(docToMdast(doc) as never)).toBe(SRC);
+  });
+
+  it("拆不开的畸形形状回落成占位：宁可不能改，也不能改坏文件", () => {
+    // 手工造一个「有源区间但区间里是 `$$$`」的 math 节点：开闭定界符重叠，splitMathBlock 返回 null
+    const nodes = mdastRootToNodes([{ type: "math", value: "x", position: { start: { offset: 0 }, end: { offset: 3 } } }], hpSchema, "$$$");
+    expect(nodes.map((n) => n.type.name)).toEqual(["opaque_block"]);
+    expect((nodes[0].attrs as { raw: string }).raw).toBe("$$$");
   });
 });

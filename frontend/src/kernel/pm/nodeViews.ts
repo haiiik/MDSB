@@ -1,6 +1,8 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { EditorView, NodeView } from "prosemirror-view";
 import { TextSelection } from "prosemirror-state";
+import { t } from "../../i18n";
+import { paintMath } from "../math";
 import { renderMermaid } from "../mermaid";
 import { addDismiss } from "../enhance";
 import {
@@ -776,6 +778,115 @@ export function codeBlockNodeView(
       if (editing) {
         stopEditing(editing);
       }
+    },
+    selectNode: () => box.classList.add("is-selected"),
+    deselectNode: () => box.classList.remove("is-selected"),
+  };
+}
+
+/**
+ * 138-B：块级公式的 NodeView —— **上面是排版结果，下面是能改的源码**。
+ *
+ * 抄的是 109/110 代码块 + Mermaid 那套（她 2026-10-17 的原话就是"复用 Mermaid 那套就地编辑"），
+ * 三件要紧的事一并抄过来：
+ * ① **防抖 250ms**：每按一个键渲一次会明显卡；
+ * ② **同一份源码只渲一次**（`lastSource`/`queuedSource` 两道去重）：
+ *    不去重时"点一下预览把光标送进源码"这种没改内容的选区事务也会重渲整块，
+ *    用户正在双击的那一下会打在孤儿节点上（126 的真缺陷）；
+ * ③ **渲不出来不许把源码藏起来**：预览区退回原文 + 提示行报错（004 的降级口径）。
+ *
+ * 定界符 `$$` **不在 DOM 里**（schema 的 toDOM 也不放）—— 136-B 实测过：
+ * 装饰文字进了 DOM 就会被 PM 的 `domAtPos` 认成内容区，打字落进标记里。
+ */
+export function mathBlockNodeView(
+  view: EditorView,
+  node: PMNode,
+  getPos: () => number | undefined
+): NodeView {
+  const box = document.createElement("div");
+  box.className = "hp-mathblock";
+  box.setAttribute("data-hp-mathblock", "1");
+  box.dataset.testid = "pm-math-block";
+
+  const bar = document.createElement("div");
+  bar.className = "hp-mathblock__bar";
+  bar.contentEditable = "false";
+  const hint = document.createElement("span");
+  hint.className = "hp-mathblock__hint";
+  hint.dataset.testid = "pm-math-hint";
+  hint.textContent = t("math.editHint");
+  bar.append(hint);
+
+  const preview = document.createElement("div");
+  preview.className = "hp-mathblock__preview";
+  preview.dataset.testid = "pm-math-preview";
+  preview.dataset.state = "pending";
+  preview.contentEditable = "false";
+
+  const pre = document.createElement("pre");
+  pre.className = "hp-mathblock__src";
+  const code = document.createElement("code");
+  code.dataset.testid = "pm-math-src";
+  pre.append(code);
+
+  box.append(bar, preview, pre);
+
+  let renderTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastSource = "";
+  let queuedSource = "";
+
+  async function renderSource(source: string) {
+    queuedSource = "";
+    lastSource = source;
+    preview.dataset.state = "pending";
+    const result = await paintMath(preview, source, true);
+    // 期间用户又改了 → 丢弃这次结果，别让旧图盖住新图
+    if (lastSource !== source) return;
+    if (result.state === "done") {
+      preview.dataset.state = "done";
+      hint.textContent = t("math.editHint");
+      hint.classList.remove("is-warn");
+    } else {
+      preview.dataset.state = "error";
+      hint.textContent = t("math.errorTip") + result.error.split("\n")[0].trim();
+      hint.classList.add("is-warn");
+    }
+  }
+
+  function schedule(source: string) {
+    if (source === lastSource || source === queuedSource) return;
+    if (renderTimer) clearTimeout(renderTimer);
+    queuedSource = source;
+    renderTimer = setTimeout(() => void renderSource(source), MERMAID_DEBOUNCE_MS);
+  }
+
+  // 点预览 → 光标进源码开头（与 110 的「点开即改」同一个动作）。
+  // math_block 的内容起点就是 pos + 1（pos 是节点自身位置，+1 跨过它的开标签）。
+  preview.addEventListener("mousedown", (e) => {
+    const pos = getPos();
+    if (pos == null) return;
+    e.preventDefault();
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos + 1)).scrollIntoView());
+    view.focus();
+  });
+
+  const sync = (n: PMNode) => schedule(n.textContent);
+  sync(node);
+
+  return {
+    dom: box,
+    contentDOM: code,
+    // 预览与提示条都不是 PM 的内容：DOM 变更与事件都不许交给 PM
+    //（`stopEvent` 是 NodeView 的成员，不是编辑器 props 的，放错位置运行时就点不动）
+    ignoreMutation: (m) => bar.contains(m.target as Node) || preview.contains(m.target as Node),
+    stopEvent: (e) => bar.contains(e.target as Node) || preview.contains(e.target as Node),
+    update: (updated) => {
+      if (updated.type.name !== "math_block") return false;
+      sync(updated);
+      return true;
+    },
+    destroy: () => {
+      if (renderTimer) clearTimeout(renderTimer);
     },
     selectNode: () => box.classList.add("is-selected"),
     deselectNode: () => box.classList.remove("is-selected"),

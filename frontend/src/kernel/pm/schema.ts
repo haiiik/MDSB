@@ -112,6 +112,80 @@ const footnoteDef = {
 };
 
 /**
+ * 138-B：块级公式 `$$…$$`。
+ *
+ * 与 136-B 的脚注定义同一套路：**定界符与两侧空白是语法骨架，存属性、不进 DOM**；
+ * 她能改的只有正文。骨架由 `mathBlock.ts` 的 `splitMathBlock/joinMathBlock` 保证拼回去一字不差。
+ *
+ * 同样**不能把 `$$` 写进 `toDOM`**（136-B 实测：装饰文字进 DOM 会被 PM 的 `domAtPos`
+ * 认成内容区，打字会落进标记里）。块级的预览由 NodeView（`nodeViews.ts` 的 `mathBlockNodeView`）
+ * 补在上面那一条里 —— 那个盒子不是内容，`ignoreMutation` / `stopEvent` 要一并接住。
+ */
+const mathBlock = {
+  group: "block",
+  content: "text*",
+  marks: "",
+  /** 同 136-B 的教训：`code: true` 是「本节点保留空白」，不是"这是代码"。
+   *  少了它，她一打字 PM 从 DOM 回读，`\n` 与 `\ ` 当场折掉。 */
+  code: true,
+  atom: false,
+  attrs: {
+    /** 缩进 + 开定界符 + 它后面的空白 */
+    before: { default: "$$\n" },
+    /** 定界符前的空白 + 闭定界符 + 行尾空白 */
+    after: { default: "\n$$" },
+  },
+  parseDOM: [{ tag: "div[data-hp-mathblock]" }],
+  toDOM: (node: PMNode): DOMOutputSpec => [
+    "div",
+    {
+      "data-hp-mathblock": "1",
+      class: "hp-mathblock",
+      "data-testid": "pm-math-block",
+    },
+    ["pre", ["code", 0]],
+  ],
+};
+
+/**
+ * 138-B：行内公式 `$…$`。
+ *
+ * **不是原子**（与 footnote_ref 不同）：可编辑的正文在内容里，定界符交给 CSS 伪元素
+ * 按 `data-hp-math-left/right` 画 —— 行内原子点进去改字要再造一套编辑态，
+ * 而她要的本来就是"看得见、改得动"。Q29（行内显示源码还是排版结果）按源码做，理由见工单。
+ */
+const mathInline = {
+  /**
+   * **`inline: true` 不是装饰**：prosemirror-model 判一个节点是行内还是块，
+   * 看的是这个标记（源码里 `this.isBlock = !(spec.inline || name == "text")`），
+   * `group: "inline"` 只是"归到哪个组"。少了 `inline: true`，Schema 构造时就会抛
+   * `Mixing inline and block content (in content expression 'inline*')` ——
+   * 整份 schema 建不起来，症状离根因很远。
+   */
+  inline: true,
+  group: "inline",
+  content: "text*",
+  code: true,
+  marks: "",
+  attrs: {
+    before: { default: "$" },
+    after: { default: "$" },
+  },
+  parseDOM: [{ tag: "span[data-hp-mathinline]" }],
+  toDOM: (node: PMNode): DOMOutputSpec => [
+    "span",
+    {
+      "data-hp-mathinline": "1",
+      "data-hp-math-left": String(node.attrs.before ?? "$"),
+      "data-hp-math-right": String(node.attrs.after ?? "$"),
+      class: "hp-mathinline",
+      "data-testid": "pm-math-inline",
+    },
+    0,
+  ],
+};
+
+/**
  * 136-B：脚注引用 `[^label]`。行内原子（和 opaque_inline 一样的形态），
  * 但带 label 且**可点** —— 点了滚到对应定义并闪一下（见 footnoteJump 插件）。
  */
@@ -149,6 +223,8 @@ const TOP_LEVEL_BLOCKS = new Set([
   "table",
   // 136-B：脚注定义是顶层块，也要带源区间 —— 回写按块拼接时靠它定位
   "footnote_def",
+  // 138-B：块级公式同样是顶层块
+  "math_block",
 ]);
 
 /** 给一组 NodeSpec 统一加上 srcFrom / srcTo 属性 */
@@ -211,6 +287,8 @@ const baseNodes = addListNodes(
   opaque_inline: opaqueInline,
   footnote_def: footnoteDef,
   footnote_ref: footnoteRef,
+  math_block: mathBlock,
+  math_inline: mathInline,
 });
 
 /** 103：把源区间属性统一挂到顶层块类型上，避免逐个手写 spec 时漏掉某个类型 */

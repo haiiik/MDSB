@@ -10,7 +10,7 @@ import { EditorView } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
 import { patch } from "../kernel/blockPatch";
 import { mdastToDoc } from "../kernel/pm/mdastToDoc";
-import { codeBlockNodeView } from "../kernel/pm/nodeViews";
+import { codeBlockNodeView, mathBlockNodeView } from "../kernel/pm/nodeViews";
 import { hpInputRules } from "../kernel/pm/inputRules";
 import { HISTORY_GROUP_DELAY_MS, isTypingTransaction } from "../kernel/pm/history";
 import { richPastePlugin } from "../kernel/pm/pastePlugin";
@@ -250,6 +250,9 @@ function editorProps(state: EditorState): DirectEditorProps {
       // theme 用 getter 传，让 Mermaid 重绘跟着当前深浅档走（D3），而不是建视图时定死。
       code_block: (node, editorView, getPos) =>
         codeBlockNodeView(editorView, node, getPos as () => number | undefined, () => props.theme),
+      // 138-B：块级公式「上面排版、下面改源码」，与 code_block 同一套路（防抖 + 去重 + 降级）
+      math_block: (node, editorView, getPos) =>
+        mathBlockNodeView(editorView, node, getPos as () => number | undefined),
     },
     // 自己接管事务分发：每次文档变化后按 104 的口径回写工作文本。
     // 注意字段名是 config 里的 `dispatchTransaction`（`EditorProps`），
