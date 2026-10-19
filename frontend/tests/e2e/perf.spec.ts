@@ -240,6 +240,24 @@ test("@perf 冷启动分包：PM 与 CM 仍在独立 chunk，没被主入口拖�
   expect(main).not.toMatch(/CodeMirror|codemirror/i);
   expect(editChunk, "编辑模式必须是自己一个 chunk").toBeTruthy();
   expect(sourceChunk, "源码模式必须是自己一个 chunk").toBeTruthy();
+
+  /*
+   * 138：KaTeX 与它的 HTML 解析器（parse5）走**动态 import**，没公式的文档不为它们付费。
+   *
+   * 这条是这轮当场补的，因为第一版把 `hast-util-from-html` 写成静态 import 之后
+   * **主入口从 328KB 涨到 509KB**，而上面那两条内容判据一个都没红 ——
+   * parse5 里没有 "prosemirror"/"CodeMirror" 这些字，"没被旧的关键字抓到"不等于"没进主入口"。
+   * 所以判据要挑**目标自身的特征串**（KaTeX 的报错前缀是它内部常量，不会出现在我们代码里），
+   * 并且同时要求那个 chunk 真的存在 —— 否则"chunk 根本没生成"也会让它假绿。
+   */
+  const entryRef = /<script type="module"[^>]*src="[^"]*\/(index-[^"]+\.js)"/.exec(
+    readFileSync(fileURLToPath(new URL("../../dist/index.html", import.meta.url)), "utf8")
+  )?.[1];
+  expect(entryRef, "dist/index.html 里找不到主入口引用").toBeTruthy();
+  const boot = files.filter((f) => f === entryRef || /^rolldown-runtime-.*\.js$/.test(f));
+  const bootText = boot.map((f) => readFileSync(`${dir}/${f}`, "utf8")).join("\n");
+  expect(bootText).not.toContain("KaTeX parse error");
+  expect(files.find((f) => /^katex-.*\.js$/.test(f)), "KaTeX 应当存在，只是不进主入口").toBeTruthy();
 });
 
 test("@perf 标签切换耗时", async ({ page }) => {

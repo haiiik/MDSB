@@ -116,6 +116,10 @@ const zh = {
   "footnotes.title": "脚注",
   "footnotes.backTo": "返回正文里的引用 {n}",
 
+  "math.errorTip": "公式语法错误，未渲染：",
+  "math.opaqueInline": "公式 {src}",
+  "math.opaqueBlock": "公式 {src} · 编辑模式暂不修改",
+
   "toolbar.doclink": "文档链接",
   "doclink.title": "插入文档链接",
   "doclink.search": "按文件名搜索…",

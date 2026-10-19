@@ -836,3 +836,39 @@
   border-radius: 3px;
   animation: hp-fn-flash 1.2s ease-out 1;
 }
+
+/* ---------- 138-A 公式（KaTeX） ----------
+ * CSS 只押我们自己的钩子 `.hp-math*`，不押 KaTeX 内部类名（`.katex` `.base` `.strut` 是它的实现细节，
+ * 押了等于每次升级都要重修一遍样式）。只有两处例外，都写在必要处：
+ * ① `.katex-display` 的外边距（我们外层已经有一层块，叠起来上下空一大截）；
+ * ② 错误态里那段原文要按等宽显示。
+ * 深色档不用单独配色：KaTeX 全程用 currentColor，跟着正文走。 */
+.hp-doc .hp-math--inline {
+  /* 行内公式默认基线偏高（1.21em 的字号 + 上下标），压半格让它跟正文对齐 */
+  vertical-align: -0.05em;
+}
+
+.hp-doc .hp-math--block {
+  display: block;
+  margin: 0.6em 0;
+  /* 长公式宁可横向滚，也不许把正文撑出横向滚动条（她的口径：收缩优先于换行/溢出） */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.hp-doc .hp-math--block .katex-display {
+  margin: 0;
+}
+
+.hp-doc .hp-math--error {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(192, 57, 43, 0.09);
+  color: var(--hp-danger, #c0392b);
+  font-family: var(--hp-font-md);
+  cursor: help;
+}
+
+.hp-doc .hp-math--block.hp-math--error {
+  text-align: left;
+}

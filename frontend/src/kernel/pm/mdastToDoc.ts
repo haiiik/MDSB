@@ -1,4 +1,5 @@
 import { Node as PMNode, type Mark, type Schema } from "prosemirror-model";
+import { tf } from "../../i18n";
 import { parseMd } from "../md";
 import { splitFootnoteDef } from "./footnoteBlock";
 import { hpSchema } from "./schema";
@@ -47,6 +48,12 @@ function rangeOf(node: AnyNode): { from: number; to: number } | null {
 function rawOf(source: string, node: AnyNode): string {
   const r = rangeOf(node);
   if (r) return source.slice(r.from, r.to);
+  // 源区间拿不到时的兜底。**math 绝不能兜成 `node.value`** ——
+  // 那是不带定界符的 LaTeX 正文，写回去就把 `$…$` / `$$…$$` 弄丢了，
+  // 而这个节点接下来会被 remark 当普通文字（甚至当斜体）解析。
+  // 其它类型的 value 就是原文本身，照旧。
+  if (node.type === "math") return "$$\n" + String(node.value ?? "") + "\n$$";
+  if (node.type === "inlineMath") return "$" + String(node.value ?? "") + "$";
   return typeof node.value === "string" ? node.value : "";
 }
 
@@ -59,6 +66,14 @@ function opaqueLabelFor(node: AnyNode): string {
       return "原始 HTML · 编辑模式不修改";
     case "footnoteDefinition":
       return `脚注定义 [^${String(node.label ?? node.identifier ?? "?")}] · 编辑模式不修改`;
+    /**
+     * 138-A：公式此刻在编辑模式还是占位（138-B 才做成「预览 + 就地改源码」）。
+     * 占位里**必须带上她的原文**：只写「暂不支持的内容（math）」等于让编辑模式
+     * 比做这个功能之前更难读 —— 以前 `$…$` 就是普通文字，看得见也改得动。
+     * 这条是桌面实测第 17 段第一条抓出来的（E2E 当时没覆盖编辑模式的公式夹具）。
+     */
+    case "math":
+      return tf("math.opaqueBlock", { src: "$$" + String(node.value ?? "") + "$$" });
     default:
       return `暂不支持的内容（${node.type}）· 编辑模式不修改`;
   }
@@ -119,6 +134,19 @@ function convertInline(node: AnyNode, schema: Schema, marks: readonly Mark[], so
 
     case "html":
       return [schema.nodes.opaque_inline.create({ label: "（HTML）", raw: rawOf(source, node) })];
+
+    /**
+     * 138-A：行内公式此刻是占位（138-B 做成就地可编辑）。
+     * 与块级同理：**label 里必须带她的原文**，否则编辑模式比没做这个功能之前更难读
+     * —— 以前 `$E=mc^2$` 就是看得见的一段文字。
+     */
+    case "inlineMath":
+      return [
+        schema.nodes.opaque_inline.create({
+          label: tf("math.opaqueInline", { src: "$" + String(node.value ?? "") + "$" }),
+          raw: rawOf(source, node),
+        }),
+      ];
 
     default:
       return [schema.nodes.opaque_inline.create({ label: `（${node.type}）`, raw: rawOf(source, node) })];

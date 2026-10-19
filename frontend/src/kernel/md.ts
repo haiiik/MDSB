@@ -3,9 +3,11 @@ import remarkParse from "remark-parse";
 import remarkStringify from "remark-stringify";
 import remarkGfm from "remark-gfm";
 import remarkFrontmatter from "remark-frontmatter";
+import remarkMath from "remark-math";
 import { toHast } from "mdast-util-to-hast";
 import { toHtml } from "hast-util-to-html";
 import type { Root } from "mdast";
+import { mathPlaceholder } from "./math";
 
 /**
  * 文档模型：md <-> mdast <-> html 的唯一出入口。
@@ -38,7 +40,14 @@ const proc = unified()
     strong: "*",
     rule: "-",
     listItemIndent: "one",
-  });
+  })
+  // 138：`$$…$$` / `$…$` 认成 math / inlineMath 节点。
+  // remark-math 一次带来**两半**：fromMarkdown（认得出公式）与 toMarkdown（写得回 `$$`）。
+  // 少了 toMarkdown 那半，序列化会把 math 节点当未知类型 —— 只 warn 一声就把内容丢了，
+  // 等于删用户的公式。位置放在 stringify 之后只是与上面那条「stringify 要排在 parse 之后」
+  // 的类型推导约束保持同一写法，**扩展注册顺序本身不影响这两半是否生效**（unified 是按
+  // parser/compiler 收集扩展的，不是按顺序），改前面面也一样 —— 这条已实测。
+  .use(remarkMath);
 
 export function parseMd(md: string): Root {
   return proc.parse(md);
@@ -62,13 +71,43 @@ export function serializeMd(ast: Root): string {
  */
 export function mdToHtml(md: string): string {
   const ast = parseMd(md);
+  stripMathHastFallback(ast);
   const tree = toHast(ast, {
     handlers: {
       yaml: () => ({ type: "text", value: "" }),
+      /**
+       * 138：公式先落**占位**（原文可见），KaTeX 由 `hydrate()` 那一步动态取完再原地替换
+       * —— 与 Mermaid 同一条路子。这里绝不 import katex：静态引一次就把它拖进主入口，
+       * 每篇没有公式的文档都得为它付冷启动成本（121/123 那条纪律）。
+       */
+      math: (_state, node) => mathPlaceholder(String((node as { value?: string }).value ?? ""), true),
+      inlineMath: (_state, node) => mathPlaceholder(String((node as { value?: string }).value ?? ""), false),
     },
   });
   return toHtml(tree, {
     characterReferences: { useNamedReferences: true },
     allowDangerousHtml: false,
   });
+}
+
+/**
+ * 把 remark-math 挂在 math 节点上的 **hast 兜底**摘掉。
+ *
+ * `mdast-util-math` 给每个 math 节点写了 `data.hName` / `data.hProperties`
+ * （行内 → `<code class="language-math math-inline">`，块级 → `<pre>`），
+ * 那是「下游没有 rehype-katex 时至少别丢内容」的退路。
+ * 但 `mdast-util-to-hast` 的 patch 会**用它覆写我们 handler 返回的 tagName**
+ * （源码 lib/state.js 里 `result.tagName = hName` 那一段），
+ * 结果排好的公式被塞进 `<code>`，跟着正文代码样式变等宽、加底色。
+ *
+ * `parseMd` 每次返回新树，这里就地删只影响本次渲染，不会污染编辑模式那条路。
+ */
+function stripMathHastFallback(node: unknown): void {
+  if (!node || typeof node !== "object") return;
+  const n = node as { type?: string; data?: Record<string, unknown>; children?: unknown[] };
+  if (n.type === "math" || n.type === "inlineMath") {
+    delete n.data?.hName;
+    delete n.data?.hProperties;
+  }
+  (n.children ?? []).forEach(stripMathHastFallback);
 }

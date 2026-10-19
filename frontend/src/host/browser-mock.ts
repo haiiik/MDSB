@@ -121,6 +121,7 @@ function makeMockFs(): Map<string, string> {  const fs = new Map<string, string>
   );
   fs.set(ENHANCE_PATH, ENHANCE_MARKDOWN);
   fs.set(FN_PATH, FN_MARKDOWN);
+  fs.set(MATH_PATH, MATH_MARKDOWN);
   fs.set(LONG_DOC_PATH, longDocMarkdown());
   return fs;
 }
@@ -150,6 +151,26 @@ ${FN_FILLER}
 [^one]: 第一个脚注的内容，含**粗体**。
 [^two]: 第二个脚注，含 \`代码\` 与多行内容。
   第二行缩进两格，属于同一个定义。
+`;
+
+/**
+ * 138-A 公式自检文档。
+ *
+ * 夹具里的反斜杠写了**两遍**（`\\frac`）：模板字符串会把 `\f` 当转义符吃掉。
+ * 覆盖：行内多条、块级三行式、与粗体混排、以及一条**故意写坏**的公式（降级判据要用它）。
+ */
+const MATH_PATH = "/demo/公式自检.md";
+const MATH_MARKDOWN = `# 公式自检
+
+行内一句：质能 $E=mc^2$ 与勾股 $a^2+b^2=c^2$ 混排，后面还有**粗体**。
+
+$$
+x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}
+$$
+
+求和与积分：$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$，$\\int_0^1 x\\,dx$。
+
+坏公式这条应当降级但看得见：$\\typeout{x}$ 收尾。
 `;
 
 const LONG_CODE = Array.from({ length: 26 }, (_, i) => `console.log("line ${i + 1}");`).join("\n");

@@ -43,6 +43,21 @@ const savedOf = (page: Page) =>
     path
   );
 
+/**
+ * Ctrl+S 之后**等脏标记熄灭**再读盘。
+ *
+ * 原来这里是 `press("Control+s")` 紧接着 `savedOf(page)` —— 读得比写盘早，
+ * 拿回来的是**没改过的原文**。最坏的是症状长得像产品缺陷：
+ * 「粘进去的块排到表前面了」（`indexOf("| 源码")` 得 94、`indexOf("## 小标题")` 得 -1），
+ * 于是人去查粘贴逻辑，而粘贴是对的。4 worker 并行 + 同机跑构建时最先红的就是它，
+ * 单跑又常常是绿的 —— **假红最贵的地方在于它骗你改错代码**。
+ * `edit-fidelity.spec.ts` 一直是等脏标记的，这条对齐过去。
+ */
+const pressSave = async (page: Page) => {
+  await page.keyboard.press("Control+s");
+  await expect(page.getByTestId("tab-dirty")).toHaveCount(0);
+};
+
 const paste = (page: Page, payload: { html?: string; text?: string }) =>
   page.evaluate((p) => (window as unknown as { __hpMockPaste: (x: unknown) => void }).__hpMockPaste(p), payload);
 
@@ -65,7 +80,7 @@ test("Excel 只给纯文本（TSV）时也变成表格，落在光标处", async
   await seedAndOpen(page);
   await placeCaret(page, ".ProseMirror p", -1, 0); // 「正文段落。」末尾
   await paste(page, { text: "部门\t慢单数\t占比\n采油作业区\t1234\t12%\n集输作业区\t56\t\n" });
-  await page.keyboard.press("Control+s");
+  await pressSave(page);
 
   const saved = await savedOf(page);
   const rows = tableRows(saved, "正文段落。");
@@ -89,7 +104,7 @@ test("Excel 的 HTML（对齐只写在 style 里）粘贴后对齐标记正确",
       "<tr><td style='text-align:left'>部门</td><td style='text-align:right'>慢单数</td><td style='text-align:center'>占比</td></tr>" +
       "<tr><td>采油</td><td style='text-align:right'>1,234</td><td style='text-align:center'>12%</td></tr></table>",
   });
-  await page.keyboard.press("Control+s");
+  await pressSave(page);
 
   const rows = tableRows(await savedOf(page), "正文段落。");
   const sep = rows[1].split("|").map((c) => c.trim()).filter(Boolean);
@@ -108,7 +123,7 @@ test("光标在表格里粘贴表格 → 并入这张表，不出现嵌套表", 
   await expect(page.locator(".ProseMirror table")).toHaveCount(1);
   await expect(page.locator(".ProseMirror tr")).toHaveCount(4); // 表头 + 3 数据行
 
-  await page.keyboard.press("Control+s");
+  await pressSave(page);
   const rows = tableRows(await savedOf(page), "# 表");
   expect(rows).toHaveLength(5); // 表头 + 分隔 + 3 数据行
   expect(rows[3]).toContain("粘贴");
@@ -122,7 +137,7 @@ test("列数不一致的表格并入时两边补齐，谁的内容都不丢", as
   await seedAndOpen(page);
   await page.locator(".ProseMirror td").first().click();
   await paste(page, { html: "<table><tr><td>甲</td><td>乙</td><td>丙</td></tr></table>" });
-  await page.keyboard.press("Control+s");
+  await pressSave(page);
 
   const rows = tableRows(await savedOf(page), "# 表");
   const cells = (l: string) => l.split("|").map((c) => c.trim()).filter(Boolean);
@@ -137,7 +152,7 @@ test("单元格里有竖线：转义后不串列", async ({ page }) => {
   await seedAndOpen(page);
   await placeCaret(page, ".ProseMirror p", -1, 0);
   await paste(page, { html: "<table><tr><td>含 | 竖线</td><td>正常</td></tr><tr><td>a\\|b</td><td>2</td></tr></table>" });
-  await page.keyboard.press("Control+s");
+  await pressSave(page);
 
   const rows = tableRows(await savedOf(page), "正文段落。");
   for (const r of rows) {
@@ -157,7 +172,7 @@ test("光标在单元格里粘「多块」富文本 → 表不许被劈开（桌
   await expect(page.locator(".ProseMirror table")).toHaveCount(1);
   await expect(page.locator(".ProseMirror tr")).toHaveCount(3); // 表头 + 原有两行，一行没少
 
-  await page.keyboard.press("Control+s");
+  await pressSave(page);
   const saved = await savedOf(page);
   expect(tableRows(saved, "")).toHaveLength(4); // 表头 + 分隔行 + 原有两行数据
   expect(saved).toContain("| 阅读 |");
@@ -175,7 +190,7 @@ test("超宽表（20 列）粘贴不崩，读回来看仍是 20 列", async ({ p
   await seedAndOpen(page);
   await placeCaret(page, ".ProseMirror p", -1, 0);
   await paste(page, { html: `<table><tr>${cols}</tr><tr>${body}</tr></table>` });
-  await page.keyboard.press("Control+s");
+  await pressSave(page);
 
   const rows = tableRows(await savedOf(page), "正文段落。");
   const cells = (l: string) => l.split("|").slice(1, -1);

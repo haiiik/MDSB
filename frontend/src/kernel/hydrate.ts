@@ -1,5 +1,6 @@
 import type { Host } from "../host/types";
 import { enhanceCodeBlocks, enhanceImages, enhanceToc } from "./enhance";
+import { hydrateMath } from "./math";
 import { hydrateMermaid } from "./mermaid";
 import { decodeSrc, dirname, isAbsoluteFsPath, isExternalUrl, resolveFsPath } from "./paths";
 import type { ThemeName } from "./render";
@@ -23,6 +24,9 @@ export async function hydrate(root: HTMLElement, opts: HydrateOptions): Promise<
   enhanceToc(root);
   enhanceImages(root, opts.host);
   await hydrateMermaid(root, { theme: opts.theme });
+  // 138：公式。放最后一步是有意的 —— 它只在文档真有 `$…$` 时才动态取 KaTeX，
+  // 而图片/代码/目录/图这些不依赖它，别让它把前面几步排在后面。
+  await hydrateMath(root);
 }
 
 /**

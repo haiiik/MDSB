@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Node as PMNode } from "prosemirror-model";
 import { describe, expect, it } from "vitest";
+import { serializeMd } from "../../src/kernel/md";
+import { docToMdast } from "../../src/kernel/pm/docToMdast";
 import { mdastToDoc } from "../../src/kernel/pm/mdastToDoc";
 import { hpSchema } from "../../src/kernel/pm/schema";
 
@@ -167,5 +170,46 @@ describe("夹具全量能转成非空文档", () => {
     const doc = mdastToDoc("");
     expect(doc.childCount).toBe(1);
     expect(doc.child(0).type.name).toBe("paragraph");
+  });
+});
+
+describe("138-A：公式在编辑模式还是占位，但**原文必须看得见**", () => {
+  const MD = "行内 $E=mc^2$ 结束。\n\n$$\nx = \\frac{1}{2}\n$$\n";
+
+  it("行内公式 → opaque_inline，label 里带着 `$E=mc^2$`，raw 是原文", () => {
+    const doc = mdastToDoc(MD, hpSchema);
+    let 行内: PMNode | null = null;
+    doc.descendants((n) => {
+      if (n.type.name === "opaque_inline") 行内 = n;
+      return true;
+    });
+    expect(行内, "行内公式没落成占位").not.toBeNull();
+    const attrs = (行内 as unknown as PMNode).attrs as { label: string; raw: string };
+    // 这条判据是桌面实测第 17 段逼出来的：以前 label 只写 `（inlineMath）`，
+    // 等于做了公式功能之后**编辑模式反而更难读**（没做之前那就是普通文字）。
+    expect(attrs.label).toContain("$E=mc^2$");
+    expect(attrs.raw).toBe("$E=mc^2$");
+  });
+
+  it("块级公式 → opaque_block，label 带原文、raw 是那三行", () => {
+    const names = types(MD);
+    expect(names).toContain("opaque_block");
+    const doc = mdastToDoc(MD, hpSchema);
+    let 块: PMNode | null = null;
+    doc.forEach((n) => {
+      if (n.type.name === "opaque_block") 块 = n;
+    });
+    const attrs = (块 as unknown as PMNode).attrs as { label: string; raw: string };
+    expect(attrs.raw).toBe("$$\nx = \\frac{1}{2}\n$$");
+    expect(attrs.label).toContain("x = \\frac{1}{2}");
+  });
+
+  it("占位写回走 raw，label 里那句说明**不会进她的文件**", () => {
+    const doc = mdastToDoc(MD, hpSchema);
+    const out = serializeMd(docToMdast(doc) as never);
+    expect(out).toContain("$E=mc^2$");
+    expect(out).toContain("$$\nx = \\frac{1}{2}\n$$");
+    expect(out).not.toContain("编辑模式");
+    expect(out).not.toContain("公式 $E=mc^2$");
   });
 });

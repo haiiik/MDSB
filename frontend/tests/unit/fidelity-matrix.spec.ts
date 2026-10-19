@@ -64,8 +64,17 @@ function editBlock(md: string, index: number, newBlockMd: string): Result {
   const parsed = mdastToDoc(newBlockMd);
   const node = parsed.firstChild;
   if (!node) throw new Error("新块解析不出节点");
-  // 盖上原来那份源区间：改过的块仍然指向原文里它自己那一段
-  const stamped = node.copy(node.content, { ...node.attrs, srcFrom: target.from, srcTo: target.to });
+  // 盖上原来那份源区间：改过的块仍然指向原文里它自己那一段。
+  // **`Node.copy()` 在这版只收 content 一个参数**（prosemirror-model 1.25.12 的 d.ts 就一行
+  // `copy(content?: Fragment | null): Node`），以前这里写的是 `node.copy(node.content, {...attrs})` ——
+  // 第二个参数被**静默忽略**，新块带的是"重新解析 newBlockMd 时算出来的"区间。
+  // 现在这张表恰好没红，是因为 `changedBlocks` 读的是**旧文档**节点上的区间，不是这份。
+  // 但那等于"判据的正确性依赖另一处不读它" —— 换成 `type.create` 显式带 attrs，才是真的盖上。
+  const stamped = node.type.create(
+    { ...node.attrs, srcFrom: target.from, srcTo: target.to },
+    node.content,
+    node.marks
+  );
   const arr = kidsOf(doc);
   arr[index] = stamped;
   const next = doc.copy(Fragment.from(arr));
@@ -158,6 +167,39 @@ describe("矩阵·恒等类（不需要该类型可编辑就成立，必须全�
     expect(r.out).toContain("[^b]:   第二条定义，冒号后三个空格");
     // 整篇重序列化会把两格改成四格（remark 的既定行为）—— 这条就是钉住我们没走那条路
     expect(r.out).not.toContain("\n    两格缩进的续行");
+  });
+
+  /**
+   * 138 的恒等行：**没编辑的公式块必须逐字节回来**，含 `$$` 定界符独占一行的写法
+   * 与反斜杠命令。此刻（138-A）公式在编辑模式还落成不透明块，所以这条属于恒等类；
+   * 138-B 把它升级成可编辑节点之后，这一行**仍然必须绿** ——
+   * "没碰的块不许动"与"该块是否可编辑"是两件事，别拿后者当前者的豁免。
+   */
+  const MATH_MD = [
+    "# 公式矩阵",
+    "",
+    "行内那句 $a_{i,j} \\ne b$，块外参照。",
+    "",
+    "$$",
+    "x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}",
+    "$$",
+    "",
+    "段落二，块外参照。",
+    "",
+    "质能方程：$$E=mc^2$$ 收尾。",
+    "",
+  ].join("\n");
+
+  it("公式未被编辑：块级 `$$` 三行式、行内 `$…$`、单行 `$$…$$` 全部逐字节回来（138）", () => {
+    const r = editBlockByText(MATH_MD, "段落二，块外参照。", "段落二被改过。\n");
+    assertLocalToBlock(r);
+    expect(r.patchCount).toBe(1);
+    expect(r.out).toContain("行内那句 $a_{i,j} \\ne b$，块外参照。");
+    expect(r.out).toContain("\n$$\nx = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\n$$\n");
+    // 单行 `$$E=mc^2$$` 整篇序列化会被 remark 规范成 `$E=mc^2$`（math-fidelity 里记着这条）；
+    // 按块拼原文必须把它**原样**带回来 —— 这正是"没碰的块连定界符都不许换"的意思
+    expect(r.out).toContain("质能方程：$$E=mc^2$$ 收尾。");
+    expect(r.out).not.toContain("质能方程：$E=mc^2$ 收尾。");
   });
 
   it("frontmatter：编辑正文时 YAML 头逐字节不动（含分隔线本身）", () => {
