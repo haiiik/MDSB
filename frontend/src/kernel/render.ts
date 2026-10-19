@@ -1,5 +1,6 @@
 import { mdToHtml } from "./md";
 import { uniqueSlug } from "./anchors";
+import { decorateFootnotes } from "./footnotes";
 
 export type ThemeName = "light" | "dark";
 
@@ -44,6 +45,9 @@ export function render(md: string, opts: RenderOptions): HTMLElement {
   if (opts.baseFontSize) article.style.setProperty("--hp-font-base", opts.baseFontSize + "px");
   article.innerHTML = mdToHtml(md);
   assignHeadingIds(article);
+  // 脚注区收尾（标题本地化 + 接管页内跳转）。放在 render 里而不是组件里：
+  // 阅读模式与日后导出共用这一个入口，别在调用方各补一遍。
+  decorateFootnotes(article);
   return article;
 }
 

@@ -117,12 +117,37 @@ function makeMockFs(): Map<string, string> {  const fs = new Map<string, string>
     "这份文档一个标题都没有，用来验证大纲的空态。\n\n第二段。\n",
   );
   fs.set(ENHANCE_PATH, ENHANCE_MARKDOWN);
+  fs.set(FN_PATH, FN_MARKDOWN);
   fs.set(LONG_DOC_PATH, longDocMarkdown());
   return fs;
 }
 
 /** 020/021/022/023 的增强自检文档 */
 const ENHANCE_PATH = "/demo/增强自检.md";
+
+/**
+ * 136-A 脚注自检文档。
+ *
+ * 中间塞了 40 段占位文字：**没有这段高度，"点引用跳过去"根本量不出来**
+ * （scrollTop 一直是 0，断言会假绿）。
+ */
+const FN_PATH = "/demo/脚注自检.md";
+const FN_FILLER = Array.from(
+  { length: 40 },
+  (_, i) => `占位段落 ${i + 1}：把正文撑高，让跳转有距离可量。`
+).join("\n\n");
+const FN_MARKDOWN = `# 脚注自检
+
+第一句带引用[^one]，第二句带引用[^two]。
+
+${FN_FILLER}
+
+第三段又引用了一次 [^one]，用来验「一条定义被多处引用」时文末有几个回跳箭头。
+
+[^one]: 第一个脚注的内容，含**粗体**。
+[^two]: 第二个脚注，含 \`代码\` 与多行内容。
+  第二行缩进两格，属于同一个定义。
+`;
 
 const LONG_CODE = Array.from({ length: 26 }, (_, i) => `console.log("line ${i + 1}");`).join("\n");
 

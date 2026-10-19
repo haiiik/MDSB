@@ -112,6 +112,9 @@ const zh = {
   "status.closeHint": "关闭这条提示",
   "status.dirty": "有未保存改动",
   "status.statsTitle": "汉字 {cjk} + 英文单词 {latin}；不计代码块与行内代码",
+
+  "footnotes.title": "脚注",
+  "footnotes.backTo": "返回正文里的引用 {n}",
 } as const;
 
 export default zh;

@@ -203,6 +203,10 @@ watch(
     () => view.theme,
     () => activeTab.value?.zoom,
     () => activeTab.value?.width,
+    // 语言也是渲染输入：阅读模式正文里那些由 JS 注入的文案（脚注标题、代码块工具条、
+    // 图片失效占位）是**一次性烘进 DOM 的**，不重画就永远停在旧语言。
+    // 133 那轮 i18n 只覆盖了 Vue 模板，这条是它留下的洞 —— 136-A 的判据把它钉住了。
+    () => settings.lang,
     () => props.host,
   ],
   async () => {
@@ -211,7 +215,10 @@ watch(
     const h = props.host ?? getHost();
     if (!tab || !h) return;
     if (tab.mode === "read" && documentRoot.value) {
-      const key = `${tab.id}\u0000${tab.markdown}\u0000${view.theme}`;
+      // 缓存键必须含**所有会烘进 DOM 的输入**。136-A 之前少了语言：watch 被 settings.lang 触发了，
+      // 但这个键没变 -> 走「只补样式」的快路径直接 return，脚注标题这类 JS 注入的文案
+      // 就永远停在旧语言。只在 watch 列表里加语言是不够的，键也要加。
+      const key = `${tab.id}\u0000${tab.markdown}\u0000${view.theme}\u0000${settings.lang}`;
       if (key === renderedKey && patchReadStyles(tab.zoom, tab.width)) {
         syncActiveHeading();
         return;

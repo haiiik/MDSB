@@ -169,6 +169,8 @@ const en: Record<MsgKey, string> = {
   "tab.newTab": "New tab",
   "tab.open": "Open file",
   "tab.close": "Close",
+  "footnotes.title": "Footnotes",
+  "footnotes.backTo": "Back to reference {n}",
 };
 
 export { en };
