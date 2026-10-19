@@ -15,7 +15,7 @@ import { hpInputRules } from "../kernel/pm/inputRules";
 import { HISTORY_GROUP_DELAY_MS, isTypingTransaction } from "../kernel/pm/history";
 import { richPastePlugin } from "../kernel/pm/pastePlugin";
 import { undoInputRule } from "prosemirror-inputrules";
-import { listKeymap, tableTabKeymap, taskListPlugin } from "../kernel/pm/plugins";
+import { footnoteJumpPlugin, listKeymap, tableTabKeymap, taskListPlugin } from "../kernel/pm/plugins";
 import { tableMenuPlugin } from "../kernel/pm/tableMenu";
 import { changedBlocks } from "../kernel/pm/patches";
 import { hpSchema } from "../kernel/pm/schema";
@@ -217,6 +217,7 @@ function buildState(md: string) {
       listKeymap(hpSchema.nodes.list_item),
       tableTabKeymap(),
       taskListPlugin(),
+      footnoteJumpPlugin(),
       tableMenuPlugin(),
       keymap(baseKeymap),
     ],

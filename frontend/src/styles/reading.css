@@ -797,3 +797,42 @@
   0%, 30% { background: rgba(127, 127, 127, 0.18); }
   100% { background: transparent; }
 }
+
+/* ---------- 136-B 脚注（编辑模式） ---------- */
+/* 定义块：标记是语法骨架，不是她能改的文字 → 用伪元素画，不进 DOM
+   （进 DOM 就会被 PM 的 domAtPos 认成内容区，实测会把打字吃进标记里） */
+.hp-doc .hp-fndef {
+  margin: 0.25em 0;
+  padding-left: 0.55em;
+  border-left: 2px solid var(--hp-border);
+  /* 正文里的换行是原文的一部分（续行），不 pre-wrap 就会被 HTML 折叠成一行 */
+  white-space: pre-wrap;
+}
+
+.hp-doc .hp-fndef::before {
+  content: "[^" attr(data-hp-fndef) "]:";
+  margin-right: 0.35em;
+  color: var(--hp-text-weak);
+  font-family: var(--hp-font-md);
+}
+
+/* 行内引用：可点，但别长得像链接（阅读模式那套下划线在这里只会显脏） */
+.hp-doc .hp-fnref {
+  color: var(--hp-accent);
+  font-family: var(--hp-font-md);
+  font-size: 0.86em;
+  vertical-align: super;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.hp-doc .hp-fnref:hover {
+  background: rgba(127, 127, 127, 0.14);
+}
+
+/* 跳转落点反馈：阅读模式与编辑模式共用这一个 class（时长由 JS 的 1.2s 对齐） */
+.hp-doc .is-fn-target {
+  border-radius: 3px;
+  animation: hp-fn-flash 1.2s ease-out 1;
+}

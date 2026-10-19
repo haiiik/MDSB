@@ -1,5 +1,6 @@
 import { Node as PMNode, type Mark, type Schema } from "prosemirror-model";
 import { parseMd } from "../md";
+import { splitFootnoteDef } from "./footnoteBlock";
 import { hpSchema } from "./schema";
 
 /**
@@ -109,13 +110,12 @@ function convertInline(node: AnyNode, schema: Schema, marks: readonly Mark[], so
     case "break":
       return [schema.nodes.hard_break.create()];
 
-    case "footnoteReference":
-      return [
-        schema.nodes.opaque_inline.create({
-          label: `[^${String(node.label ?? node.identifier ?? "?")}]`,
-          raw: rawOf(source, node),
-        }),
-      ];
+    case "footnoteReference": {
+      // 136-B：不再是"看得到动不了的占位"，而是带 label、可点跳转的行内原子。
+      // raw 仍然留着 —— 回写时按原文落地，label 只用于跳转与识别。
+      const label = String(node.label ?? node.identifier ?? "");
+      return [schema.nodes.footnote_ref.create({ label, raw: rawOf(source, node) })];
+    }
 
     case "html":
       return [schema.nodes.opaque_inline.create({ label: "（HTML）", raw: rawOf(source, node) })];
@@ -241,8 +241,26 @@ function convertBlock(node: AnyNode, schema: Schema, source: string): PMNode[] {
       // 单独走到这里时（非表格内的手工构造）无从判断表头，按数据行处理
       return [convertRow(node, schema, node.header === true, source)];
 
+    case "footnoteDefinition": {
+      // 136-B：定义块**可以就地改正文**了（此前是不透明块）。
+      // 拆成「标记 / 冒号后空白 / 续行缩进 / 正文」，前三个存属性、正文进内容；
+      // 回写走 joinFootnoteDef 拼回原文（往返性质由 footnote-block.spec.ts 钉住）。
+      const raw = rawOf(source, node);
+      const parts = splitFootnoteDef(raw);
+      // 拆不动的形态（源区间缺失、手写得很怪）回落成不透明块 —— 宁可不能改，也不能改坏
+      if (!parts) {
+        return [schema.nodes.opaque_block.create({ label: opaqueLabelFor(node), raw })];
+      }
+      return [
+        schema.nodes.footnote_def.create(
+          { label: parts.label, gap: parts.gap, indent: parts.indent },
+          parts.body ? schema.text(parts.body) : undefined
+        ),
+      ];
+    }
+
     default:
-      // 含 yaml / html / footnoteDefinition / 未知类型：占位 + 原文，绝不丢弃
+      // 含 yaml / html / 未知类型：占位 + 原文，绝不丢弃
       return [
         schema.nodes.opaque_block.create({
           label: opaqueLabelFor(node),

@@ -1,4 +1,5 @@
 import type { Mark, Node as PMNode } from "prosemirror-model";
+import { joinFootnoteDef } from "./footnoteBlock";
 
 /**
  * 103：ProseMirror 文档 → mdast（`mdastToDoc` 的反向）。
@@ -116,6 +117,11 @@ function inlineToMdast(node: PMNode): Md {
     // 占位原子的原文存在 raw 上，按原始 HTML 节点写回即可逐字节还原
     return { type: "html", value: String(node.attrs.raw ?? node.attrs.label ?? "") };
   }
+  if (node.type.name === "footnote_ref") {
+    // 136-B：引用还是"原文说了算" —— raw 在就按 raw 落地（她没法在编辑模式改引用文字，
+    // 改了 label 也只会让引用和定义接不上），拿不到 raw 才按 label 现拼一个。
+    return { type: "html", value: String(node.attrs.raw || `[^${String(node.attrs.label ?? "")}]`) };
+  }
   return { type: "text", value: node.textContent };
 }
 
@@ -189,6 +195,21 @@ export function blockToMdast(node: PMNode): Md {
     case "opaque_block":
       // 不透明保留的落点：原文逐字节存在 raw 上，写回 html 节点即可原样落地
       return { type: "html", value: String(node.attrs.raw ?? "") };
+
+    case "footnote_def": {
+      // 136-B：定义块 = 标记 + 冒号后空白 + 正文（按原文缩进重排续行）。
+      // 走 joinFootnoteDef 而不是让 remark 的序列化器重排 —— 后者会把两格续行缩进改成四格，
+      // 那是她没做过的改动（实测见工单 136 §一）。
+      return {
+        type: "html",
+        value: joinFootnoteDef({
+          label: String(node.attrs.label ?? ""),
+          gap: String(node.attrs.gap ?? " "),
+          indent: String(node.attrs.indent ?? "  "),
+          body: node.textContent,
+        }),
+      };
+    }
 
     default:
       return { type: "html", value: node.textContent };

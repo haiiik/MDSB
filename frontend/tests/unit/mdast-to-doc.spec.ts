@@ -102,22 +102,27 @@ describe("行内映射", () => {
 });
 
 describe("不丢内容：无法表示的一律占位", () => {
-  it("frontmatter / 裸 HTML / 脚注定义 → opaque_block，且周围段落还在", () => {
+  it("frontmatter / 裸 HTML → opaque_block；脚注定义 136-B 起升级为可编辑块", () => {
     const md = "---\ntitle: 甲\n---\n\n# 标题\n\n<div class=\"x\">内容</div>\n\n段落甲[^a]\n\n[^a]: 脚注\n";
     const doc = mdastToDoc(md);
     const names = types(md);
     expect(names).toContain("opaque_block");
-    expect(names.filter((n) => n === "opaque_block")).toHaveLength(3); // yaml / html / footnoteDefinition
+    // 136-B 之前这里是 3：脚注定义也走占位。现在它是 footnote_def，
+    // **占位数少一个不是"少了一层保护"，而是那一块从"不能改"变成"能改且逐字节保真"**
+    expect(names.filter((n) => n === "opaque_block")).toHaveLength(2); // yaml / html
+    expect(names).toContain("footnote_def");
+    // 内容仍然一个字都不丢（占位与可编辑块都要过这条）
     expect(doc.textContent).toContain("标题");
     expect(doc.textContent).toContain("段落甲");
+    expect(doc.textContent).toContain("脚注");
   });
 
-  it("脚注引用 → 行内占位，不吞掉所在段落", () => {
+  it("脚注引用 → footnote_ref（136-B 起可点跳转），不吞掉所在段落", () => {
     // remark-gfm 只在**存在定义**时才把 `[^x]` 解析成 footnoteReference，
     // 没有定义时它是普通文本 —— 这是 remark 的既定行为，不是我们的丢失。
     const doc = mdastToDoc("前面[^x]后面\n\n[^x]: 注\n");
     const names = doc.child(0).children.map((c) => c.type.name);
-    expect(names).toContain("opaque_inline");
+    expect(names).toContain("footnote_ref");
     expect(doc.child(0).textContent).toContain("前面");
     expect(doc.child(0).textContent).toContain("后面");
     expect(types("没有定义的引用[^q]\n")).toEqual(["paragraph"]);

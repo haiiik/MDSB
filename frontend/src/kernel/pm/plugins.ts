@@ -2,7 +2,7 @@ import { liftListItem, splitListItem } from "prosemirror-schema-list";
 import { goToNextCell } from "prosemirror-tables";
 import { chainCommands } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
-import { Plugin, type EditorState, type Transaction } from "prosemirror-state";
+import { Plugin, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
 import type { NodeType } from "prosemirror-model";
 import type { EditorView } from "prosemirror-view";
 
@@ -129,5 +129,55 @@ export function tableTabKeymap() {
   return keymap({
     Tab: goToNextCell(1),
     "Shift-Tab": goToNextCell(-1),
+  });
+}
+
+/** 找某个 label 的脚注定义块在文档里的位置；找不到返回 null */
+function footnoteDefPos(state: EditorState, label: string): number | null {
+  let found: number | null = null;
+  state.doc.descendants((node, pos) => {
+    if (found != null) return false;
+    if (node.type.name === "footnote_def" && String(node.attrs.label) === label) {
+      found = pos;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
+/**
+ * 136-B：编辑模式里**点脚注引用 → 滚到对应定义并把光标放进去**。
+ *
+ * 她定的口径是「点引用跳到定义改文字」。为什么落点是"光标进正文"而不是只滚动：
+ * 只滚过去她还得再点一次才能改，那这一步就没省掉任何动作。
+ *
+ * 找不到定义时**不吞这次点击**（返回 false）—— 引用悬空是她自己写的状态，
+ * 点了没反应比弹一句"没有这条定义"更不扰人，也不会把点击顺带变成选区清空。
+ */
+export function footnoteJumpPlugin(): Plugin {
+  return new Plugin({
+    props: {
+      handleDOMEvents: {
+        click: (view, ev) => {
+          const el = (ev.target as HTMLElement | null)?.closest?.("[data-hp-fnref]") as HTMLElement | null;
+          if (!el) return false;
+          const label = el.getAttribute("data-hp-fnref") ?? "";
+          if (!label) return false;
+          const pos = footnoteDefPos(view.state, label);
+          if (pos == null) return false;
+          ev.preventDefault();
+          view.dispatch(
+            view.state.tr.setSelection(TextSelection.create(view.state.doc, pos + 1)).scrollIntoView()
+          );
+          view.focus();
+          // 闪一下当作落点反馈（和阅读模式同一套 class / 同一时长）
+          const dom = view.nodeDOM(pos) as HTMLElement | null;
+          dom?.classList.add("is-fn-target");
+          window.setTimeout(() => dom?.classList.remove("is-fn-target"), 1200);
+          return true;
+        },
+      },
+    },
   });
 }

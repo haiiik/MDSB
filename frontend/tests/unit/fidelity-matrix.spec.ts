@@ -131,6 +131,35 @@ describe("矩阵·恒等类（不需要该类型可编辑就成立，必须全�
     expect(r.out).toContain("![装置照片](assets/photo.png)");
   });
 
+  /**
+   * 136 的恒等行：**没编辑的脚注定义必须逐字节回来，含续行缩进与冒号后的空格数。**
+   * 这一行是 Q27（她定「先不做跨块重排」）的另一半凭据 ——
+   * 上一行证明"改了的那一块只动那一块"，这一行证明"没改的那一块连空格都没多"。
+   */
+  const FN_MD = [
+    "# 脚注矩阵",
+    "",
+    "正文一句[^a]，另一句[^b]。",
+    "",
+    "段落二，块外参照。",
+    "",
+    "[^a]: 第一条定义",
+    "  两格缩进的续行",
+    "",
+    "[^b]:   第二条定义，冒号后三个空格",
+    "",
+  ].join("\n");
+
+  it("脚注定义未被编辑：标记、冒号后空格数、续行缩进全部逐字节回来（136）", () => {
+    const r = editBlockByText(FN_MD, "段落二，块外参照。", "段落二被改过。\n");
+    assertLocalToBlock(r);
+    expect(r.patchCount).toBe(1);
+    expect(r.out).toContain("[^a]: 第一条定义\n  两格缩进的续行");
+    expect(r.out).toContain("[^b]:   第二条定义，冒号后三个空格");
+    // 整篇重序列化会把两格改成四格（remark 的既定行为）—— 这条就是钉住我们没走那条路
+    expect(r.out).not.toContain("\n    两格缩进的续行");
+  });
+
   it("frontmatter：编辑正文时 YAML 头逐字节不动（含分隔线本身）", () => {
     const fm = fx("10-frontmatter-footnote.md");
     const r = editBlockByText(fm, "段落二，块外参照。", "段落二被改过。\n");
@@ -283,6 +312,27 @@ describe("矩阵·实现类（各块类型的编辑工单交付）", () => {
     ]);
     expect(r.out).toContain("白天班<br>夜间班"); // Q2：单元格换行是 <br>，不是空格
     expect(r.out).toContain("段落，块外参照。");
+  });
+
+  it("脚注定义：改一条的正文，另一条定义与正文引用都不动（136，Q27「只动被编辑那一块」）", () => {
+    const md = [
+      "# 脚注矩阵",
+      "",
+      "正文一句[^a]，另一句[^b]。",
+      "",
+      "[^a]: 第一条定义",
+      "  两格缩进的续行",
+      "",
+      "[^b]:   第二条定义，冒号后三个空格",
+      "",
+    ].join("\n");
+    const r = editBlockByText(md, "[^a]: 第一条定义", "[^a]: 第一条定义改过了\n  续行也改过了\n");
+    assertLocalToBlock(r);
+    expect(r.patchCount).toBe(1);
+    expect(r.out).toContain("[^a]: 第一条定义改过了\n  续行也改过了");
+    // 另一条定义连"冒号后三个空格"这种细节都没被规整掉
+    expect(r.out).toContain("[^b]:   第二条定义，冒号后三个空格");
+    expect(r.out).toContain("正文一句[^a]，另一句[^b]。");
   });
 
   it("链接：改链接文字，URL 一个字节不变（106，本行按「链接可编辑」验收）", () => {

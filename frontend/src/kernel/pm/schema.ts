@@ -60,6 +60,81 @@ const opaqueInline = {
 };
 
 /**
+ * 136-B：脚注定义块 —— **可编辑**，但只编辑正文。
+ *
+ * 为什么不是"整块原文塞一个 textarea"：那样她就得自己维护 `[^label]:` 与续行缩进，
+ * 一个手滑就把语法弄坏；也不是"像段落一样富文本"：定义里的 `**粗体**` 要不要再拆一层
+ * 行内节点，拆了就要处理"她把标记删一半"，代价远超这一颗的价值。
+ *
+ * 所以：**标记与缩进存在属性上、正文是纯文本内容**，回写时走 `joinFootnoteDef` 拼回原文
+ * （往返性质由 `footnote-block.spec.ts` 钉住）。她看到能改的就是正文，
+ * 语法骨架由我们维持 —— 与 109 代码块「就地改内容、围栏由我们补」同一条路子。
+ */
+const footnoteDef = {
+  group: "block",
+  content: "text*",
+  /**
+   * **`code: true` 不是"这是代码"，而是 PM 的「这个节点的内容保留空白」开关。**
+   * 不加它：Schema 默认 `whitespace: "normal"`，她一打字 PM 就从 DOM 回读一次，
+   * 续行那个 `\n` 当场被折叠成空格 —— 实测存出来的文件是
+   * `[^a]: 改过：第一个定义 两格缩进的续行`（换行没了）。
+   * CSS 的 `white-space: pre-wrap` 只管**显示**，管不了 PM 的 DOM↔doc 往返，两者都要。
+   */
+  code: true,
+  attrs: {
+    label: { default: "" },
+    /** 冒号后的空白，原样保留；拼回时保证非空（见 joinFootnoteDef） */
+    gap: { default: " " },
+    /** 续行缩进，原样保留 */
+    indent: { default: "  " },
+    srcFrom: { default: null },
+    srcTo: { default: null },
+  },
+  parseDOM: [{ tag: "div[data-hp-fndef]" }],
+  /**
+   * **标记 `[^label]:` 不放进 DOM**，交给 CSS `::before` + `attr()` 画。
+   *
+   * 一开始是手写一个 `<span class="hp-fndef__mark">[^a]:</span>` 再把内容洞放在第二个 span 里，
+   * 实测直接把编辑弄坏：点引用后打字，`改过：` 落进了**标记那个 span**（`[^a]:改过：`），
+   * 而正文里的换行被抹平成空格。根因是 PM 的 `domAtPos` 按 DOM 结构反推位置，
+   * 一个"装饰 span + 内容 span"的组合它并不认得 —— 要用 NodeView 才管得住。
+   * 伪元素没有 DOM 节点、不可能被选中、也不可能吃到输入，是这里最小且正确的解。
+   */
+  toDOM: (node: PMNode): DOMOutputSpec => [
+    "div",
+    {
+      "data-hp-fndef": String(node.attrs.label ?? ""),
+      class: "hp-fndef",
+      "data-testid": "pm-footnote-def",
+    },
+    0,
+  ],
+};
+
+/**
+ * 136-B：脚注引用 `[^label]`。行内原子（和 opaque_inline 一样的形态），
+ * 但带 label 且**可点** —— 点了滚到对应定义并闪一下（见 footnoteJump 插件）。
+ */
+const footnoteRef = {
+  inline: true,
+  group: "inline",
+  atom: true,
+  selectable: false,
+  attrs: { label: { default: "" }, raw: { default: "" } },
+  parseDOM: [{ tag: "span[data-hp-fnref]" }],
+  toDOM: (node: PMNode): DOMOutputSpec => [
+    "span",
+    {
+      "data-hp-fnref": String(node.attrs.label || ""),
+      class: "hp-fnref",
+      "data-testid": "pm-footnote-ref",
+      title: String(node.attrs.label || ""),
+    },
+    String(node.attrs.raw || `[^${String(node.attrs.label)}]`),
+  ],
+};
+
+/**
  * 103：只有**顶层块**需要携带源区间（D23 的「块」= mdast 根节点的直接子节点）。
  * 嵌套的 list_item / table_cell 不需要，给它们加属性只会让 `node.eq` 变复杂。
  */
@@ -72,6 +147,8 @@ const TOP_LEVEL_BLOCKS = new Set([
   "bullet_list",
   "ordered_list",
   "table",
+  // 136-B：脚注定义是顶层块，也要带源区间 —— 回写按块拼接时靠它定位
+  "footnote_def",
 ]);
 
 /** 给一组 NodeSpec 统一加上 srcFrom / srcTo 属性 */
@@ -132,6 +209,8 @@ const baseNodes = addListNodes(
   },
   opaque_block: opaqueBlock,
   opaque_inline: opaqueInline,
+  footnote_def: footnoteDef,
+  footnote_ref: footnoteRef,
 });
 
 /** 103：把源区间属性统一挂到顶层块类型上，避免逐个手写 spec 时漏掉某个类型 */
