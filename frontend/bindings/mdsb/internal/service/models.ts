@@ -48,3 +48,46 @@ export class FileInfo {
         return new FileInfo($$parsedSource as Partial<FileInfo>);
     }
 }
+
+/**
+ * MarkdownEntry 是「插入文档链接」（137）弹层里的一条候选文档。
+ */
+export class MarkdownEntry {
+    /**
+     * 绝对路径，正斜杠（前端一律按正斜杠处理）
+     */
+    "path": string;
+
+    /**
+     * 文件名，含扩展名
+     */
+    "name": string;
+
+    /**
+     * 相对**搜索根**的路径（/ 分隔），用于弹层里显示"在哪"
+     */
+    "rel": string;
+
+    /** Creates a new MarkdownEntry instance. */
+    constructor($$source: Partial<MarkdownEntry> = {}) {
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("rel" in $$source)) {
+            this["rel"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MarkdownEntry instance from a string or object.
+     */
+    static createFrom($$source: any = {}): MarkdownEntry {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new MarkdownEntry($$parsedSource as Partial<MarkdownEntry>);
+    }
+}

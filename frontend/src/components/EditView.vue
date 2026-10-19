@@ -21,6 +21,7 @@ import { changedBlocks } from "../kernel/pm/patches";
 import { hpSchema } from "../kernel/pm/schema";
 import {
   blockCommand,
+  insertDocLinkCommand,
   linkCommand,
   toggleBold,
   toggleItalic,
@@ -49,6 +50,7 @@ import {
   search as searchState,
   unregisterSearchAdapter,
 } from "../state/search";
+import DocLinkPicker from "./DocLinkPicker.vue";
 import EditToolbar from "./EditToolbar.vue";
 
 /**
@@ -119,6 +121,16 @@ function onMark(which: "bold" | "italic") {
 
 function onLink(href: string) {
   runCommand(linkCommand(href));
+}
+
+/** 137：「插入文档链接」弹层。开合状态放这一层，弹层自己只管选人、不管光标 */
+const doclinkOpen = ref(false);
+
+function onDocLinkInsert(payload: { text: string; href: string }) {
+  doclinkOpen.value = false;
+  runCommand(insertDocLinkCommand(payload.text, payload.href));
+  // 弹层关掉后焦点必须回编辑器，否则她接着打字会打到窗口上（EditToolbar 那排按钮同理）
+  view?.focus();
 }
 
 const scroller = ref<HTMLElement | null>(null);
@@ -441,7 +453,13 @@ defineExpose({
       @block="onBlock"
       @mark="onMark"
       @link="onLink"
+      @doclink="doclinkOpen = true"
       @fontsize="(v: number) => emit('fontsize', v)"
+    />
+    <DocLinkPicker
+      v-if="doclinkOpen"
+      @close="doclinkOpen = false; view?.focus()"
+      @insert="onDocLinkInsert"
     />
     <div ref="scroller" class="edit-pane__scroll">
       <div ref="host" class="edit-pane__host" />
@@ -456,6 +474,9 @@ defineExpose({
   display: flex;
   flex-direction: column;
   background: var(--hp-bg);
+  /* 137：「插入文档链接」弹层是绝对定位的，锚点必须是这一层
+     （锚到更外面会跟着窗口滚动跑，锚到 .edit-pane__scroll 会被裁切） */
+  position: relative;
 }
 
 /* 滚动的是内层，工具栏留在原位（sticky 需要滚动容器，这里直接把它挪出容器更简单） */

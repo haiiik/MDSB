@@ -7,6 +7,7 @@ package service
 
 import (
 	"encoding/base64"
+	"io/fs"
 	"errors"
 	"fmt"
 	"os"
@@ -236,4 +237,97 @@ func (s *FileService) PickSaveFile(defaultName string) (string, error) {
 	}
 	s.rememberDir(path)
 	return path, nil
+}
+
+// MarkdownEntry 是「插入文档链接」（137）弹层里的一条候选文档。
+type MarkdownEntry struct {
+	Path string `json:"path"` // 绝对路径，正斜杠（前端一律按正斜杠处理）
+	Name string `json:"name"` // 文件名，含扩展名
+	Rel  string `json:"rel"`  // 相对**搜索根**的路径（/ 分隔），用于弹层里显示"在哪"
+}
+
+const (
+	// 一次扫描的硬上限。**宁可少给几条让她继续输关键词，
+	// 也不能让弹层一打开就卡住界面** —— 一个 node_modules 里就能有几万个 .md。
+	mdScanLimit = 400
+	// 最深下潜几层。再深的目录树通常是归档而不是知识库。
+	mdScanMaxDepth = 8
+)
+
+// skipDirNames 只列**确定不是用户文档**的依赖/版本库目录。
+//
+// 刻意不把 `dist` / `build` / `out` 放进来：这些名字完全可能是她自己叫这个的文档目录，
+// 静默跳过就会变成"我明明有这份文档，弹层里搜不到"，那比多扫几个目录严重得多。
+var skipDirNames = map[string]bool{"node_modules": true, ".git": true}
+
+// ListMarkdown 递归列出目录下的 Markdown 文件（137 的宿主原语）。
+//
+// 三条口径：
+//  1. **不跟随符号链接**（用 WalkDir，天然不跟随），避免环路与越界；
+//  2. 隐藏目录（以 `.` / `_` 开头）与 node_modules/.git 跳过；
+//  3. 单个子目录读不了（权限、被占用）**跳过并继续**，只有根目录本身不可读才报错 ——
+//     扫盘是"给她挑文件"的辅助动作，不该因为一棵树里有一个坏目录就整个失败。
+func (s *FileService) ListMarkdown(dir string, limit int) ([]MarkdownEntry, error) {
+	root := strings.TrimSpace(filepath.Clean(dir))
+	if root == "" {
+		return nil, errors.New("目录为空")
+	}
+	st, err := os.Stat(root)
+	if err != nil {
+		return nil, err
+	}
+	if !st.IsDir() {
+		return nil, fmt.Errorf("不是目录: %s", root)
+	}
+	if limit <= 0 || limit > mdScanLimit {
+		limit = mdScanLimit
+	}
+	rootDepth := strings.Count(root, string(os.PathSeparator))
+	out := make([]MarkdownEntry, 0, 32)
+
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			// 子目录读不了：跳过（根目录已在上面 stat 过，不会走到这里）
+			if d != nil && d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		name := d.Name()
+		if p != root && (name[0] == '.' || name[0] == '_') {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			if skipDirNames[strings.ToLower(name)] {
+				return fs.SkipDir
+			}
+			if strings.Count(p, string(os.PathSeparator))-rootDepth >= mdScanMaxDepth {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !openableExts[strings.ToLower(filepath.Ext(name))] {
+			return nil
+		}
+		rel, rerr := filepath.Rel(root, p)
+		if rerr != nil {
+			rel = name
+		}
+		out = append(out, MarkdownEntry{
+			Path: filepath.ToSlash(p),
+			Name: name,
+			Rel:  filepath.ToSlash(rel),
+		})
+		if len(out) >= limit {
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, filepath.SkipAll) {
+		return out, err
+	}
+	return out, nil
 }

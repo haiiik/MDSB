@@ -11,5 +11,6 @@ export {
 };
 
 export {
-    FileInfo
+    FileInfo,
+    MarkdownEntry
 } from "./models.js";

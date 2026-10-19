@@ -171,6 +171,18 @@ const en: Record<MsgKey, string> = {
   "tab.close": "Close",
   "footnotes.title": "Footnotes",
   "footnotes.backTo": "Back to reference {n}",
+  "toolbar.doclink": "Doc link",
+  "doclink.title": "Insert document link",
+  "doclink.search": "Search by file name…",
+  "doclink.loading": "Scanning this folder…",
+  "doclink.empty": "No Markdown documents found nearby",
+  "doclink.noBase": "This file isn't saved yet, so a relative path can't be computed — absolute only",
+  "doclink.rel": "Relative path",
+  "doclink.abs": "Absolute path",
+  "doclink.relHint": "Relative to the current file's folder; links survive moving the whole folder",
+  "doclink.insert": "Insert",
+  "doclink.capped": "Showing the first {n} matches — keep typing to narrow it down",
+  "doclink.scanError": "Could not scan the folder: {msg}",
 };
 
 export { en };

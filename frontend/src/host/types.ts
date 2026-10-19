@@ -26,6 +26,16 @@ export interface FileStat {
   isDir: boolean;
 }
 
+/** 137「插入文档链接」的一条候选文档（宿主侧已过滤成 Markdown、已跳过隐藏与依赖目录） */
+export interface MdEntry {
+  /** 绝对路径，正斜杠 */
+  path: string;
+  /** 文件名，含扩展名 */
+  name: string;
+  /** 相对搜索根的路径，`/` 分隔 */
+  rel: string;
+}
+
 /** 最近文件条目（011）。置顶项排在最前，其余按最后打开时间倒序 */
 export interface RecentEntry {
   path: string;
@@ -107,6 +117,16 @@ export interface HostBase {
    * 只在「settings.v1 里还没存过 lang」时用作首启初值，用户改过一次就以存值为准。
    */
   installLanguage(): Promise<string>;
+
+  /**
+   * 137「插入文档链接」：递归列出某个目录下的 Markdown 文件。
+   *
+   * `dir` 传**当前文件所在目录**（她定的口径：不引入"工作区根"概念）。
+   * `limit` 是硬上限，宿主侧还会再夹一次 —— 一个 node_modules 就能有几万个 .md，
+   * 不收住就是"弹层一打开界面卡死"。
+   * 返回的 `rel` 是相对 `dir` 的路径，弹层用它显示"这份文档在哪"。
+   */
+  listMarkdown(dir: string, limit: number): Promise<MdEntry[]>;
 
   // ---- 窗口 ----
   windowMinimise(): Promise<void>;

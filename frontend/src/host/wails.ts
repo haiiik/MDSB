@@ -1,7 +1,7 @@
 import { Events, Window } from "@wailsio/runtime";
 import { AppService, FileService, StateService } from "../../bindings/mdsb/internal/service";
 import { toBase64 } from "./base64";
-import type { FileStat, HostBase } from "./types";
+import type { FileStat, HostBase, MdEntry } from "./types";
 
 /**
  * 桌面 wails 宿主：host 契约到 Go 服务的唯一映射处。
@@ -85,6 +85,10 @@ export function createWailsHost(): HostBase {
       const v = await StateService.InstallLanguage();
       return v === "en" ? "en" : v === "zh" ? "zh" : "";
     },
+
+    // 137：扫盘在 Go 侧做（前端拿不到文件系统），这里只转一次。
+    // 返回的是 bindings 生成的类实例，字段与 MdEntry 一致，直接结构化兼容。
+    listMarkdown: (dir: string, limit: number) => FileService.ListMarkdown(dir, limit) as Promise<MdEntry[]>,
 
     async windowMinimise() {
       Window.Minimise();

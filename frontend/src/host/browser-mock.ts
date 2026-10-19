@@ -1,4 +1,4 @@
-import type { FileStat, HostBase, HostInfo } from "./types";
+import type { FileStat, HostBase, HostInfo, MdEntry } from "./types";
 
 /**
  * 浏览器 mock 宿主。
@@ -9,6 +9,9 @@ import type { FileStat, HostBase, HostInfo } from "./types";
  */
 
 const LS_PREFIX = "mdsb.mock.";
+
+/** 与 Go 侧 `openableExts` 同一份清单（137 的 mock 必须同口径，否则端到端可测是假的） */
+const MOCK_MD_EXT = /\.(md|markdown|mdown|mkd|mkdn)$/i;
 
 const DEMO_PATH = "/demo/欢迎.md";
 
@@ -336,6 +339,32 @@ export function createBrowserMockHost(): HostBase {
       } catch {
         return "";
       }
+    },
+
+    /**
+     * 137：mock 版递归列目录。
+     *
+     * 必须和 Go 侧 `ListMarkdown` 同口径（跳过隐藏 / `_` 开头 / node_modules、
+     * 只认那五种扩展名、有硬上限），否则"端到端可测"是假的：
+     * 浏览器里能搜到的文档，到桌面上搜不到。
+     */
+    async listMarkdown(dir: string, limit: number): Promise<MdEntry[]> {
+      const root = (dir || "").replace(/\/+$/, "");
+      const cap = limit > 0 ? Math.min(limit, 400) : 400;
+      const out: MdEntry[] = [];
+      if (!root) return out;
+      for (const p of [...files.keys()].sort()) {
+        if (!p.startsWith(root + "/")) continue;
+        const rel = p.slice(root.length + 1);
+        const segs = rel.split("/");
+        if (segs.some((s) => s.startsWith(".") || s.startsWith("_") || s.toLowerCase() === "node_modules")) continue;
+        // 与 Go 侧 mdScanMaxDepth 对齐（rel 的段数 = 目录层数 + 文件名）
+        if (segs.length > 9) continue;
+        if (!MOCK_MD_EXT.test(p)) continue;
+        out.push({ path: p, name: segs[segs.length - 1], rel });
+        if (out.length >= cap) break;
+      }
+      return out;
     },
 
     async windowMinimise() {

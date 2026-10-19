@@ -24,6 +24,8 @@ const emit = defineEmits<{
   block: [target: BlockTarget];
   mark: [which: "bold" | "italic"];
   link: [href: string];
+  /** 137：打开「插入文档链接」弹层 */
+  doclink: [];
   fontsize: [px: number];
 }>();
 
@@ -190,6 +192,17 @@ function applyLink() {
         </button>
       </template>
     </span>
+
+    <!-- 137：从当前目录挑一篇文档插成链接。放在「链接」后面，因为它就是链接的一种 -->
+    <button
+      class="edit-toolbar__btn"
+      :class="{ 'is-disabled': marksBlocked }"
+      :disabled="marksBlocked"
+      data-testid="tb-doclink"
+      :title="t('toolbar.doclink')"
+      type="button"
+      @click="emit('doclink')"
+    >{{ t("toolbar.doclink") }}</button>
 
     <!-- 130：字号选择靠最右（它不是"格式按钮"，视觉上要与左边那一排分开）。**当前隐藏**，见脚本里的 SHOW_FONT_SIZE -->
     <template v-if="SHOW_FONT_SIZE">

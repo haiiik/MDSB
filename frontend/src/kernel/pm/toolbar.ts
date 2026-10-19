@@ -256,8 +256,38 @@ export function linkCommand(href: string): Command {
   };
 }
 
-/* ---------- 下面两个只给单测用：省掉每个用例手写位置 ---------- */
+/**
+ * 137：在光标处插入一条**文档链接**。
+ *
+ * 与 `linkCommand` 的分工：那条要求有选区（给选中的文字加链接 mark），
+ * 而"插入文档链接"最常见的场景是**光标停在那儿、什么也没选** ——
+ * 这时插入文件名并加 link mark。有选区时不覆盖她选的字：
+ * 把她选中的文字变成链接（和 `linkCommand` 一致），而不是拿文件名去替换。
+ *
+ * 插入的是**带 mark 的节点**，不是 `[文字](路径)` 这串字面文本 ——
+ * 后者会在编辑模式里显示成裸括号，切到源码模式才发现不对。
+ * 落盘时由 106 那套 mark→Markdown 的反向映射自动写成 `[文字](路径)`。
+ */
+export function insertDocLinkCommand(text: string, href: string): Command {
+  const mark = hpSchema.marks.link;
+  return (state, dispatch) => {
+    const { from, to } = state.selection;
+    const tr = state.tr;
+    if (from === to) {
+      if (!text) return false;
+      tr.insertText(text, from);
+      tr.addMark(from, from + text.length, mark.create({ href, title: null }));
+    } else {
+      // 有选区：只加 mark，不动她的文字
+      tr.addMark(from, to, mark.create({ href, title: null }));
+    }
+    if (!tr.docChanged) return false;
+    dispatch?.(tr.scrollIntoView());
+    return true;
+  };
+}
 
+/* ---------- 下面两个只给单测用：省掉每个用例手写位置 ---------- */
 /** 拼一个文档 */
 export function testDoc(...blocks: PMNode[]): PMNode {
   return n.doc.create(null, Fragment.from(blocks));

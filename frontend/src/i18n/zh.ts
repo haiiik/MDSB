@@ -115,6 +115,19 @@ const zh = {
 
   "footnotes.title": "脚注",
   "footnotes.backTo": "返回正文里的引用 {n}",
+
+  "toolbar.doclink": "文档链接",
+  "doclink.title": "插入文档链接",
+  "doclink.search": "按文件名搜索…",
+  "doclink.loading": "正在扫描当前目录…",
+  "doclink.empty": "这一带没有找到 Markdown 文档",
+  "doclink.noBase": "当前文件还没保存，算不出相对路径 —— 只能插绝对路径",
+  "doclink.rel": "相对路径",
+  "doclink.abs": "绝对路径",
+  "doclink.relHint": "相对当前文件所在目录；整个目录一起搬走链接也不会断",
+  "doclink.insert": "插入",
+  "doclink.capped": "已截断显示前 {n} 条，继续输关键词缩小范围",
+  "doclink.scanError": "扫描目录失败：{msg}",
 } as const;
 
 export default zh;

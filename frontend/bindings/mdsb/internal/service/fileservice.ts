@@ -15,6 +15,21 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 /**
+ * ListMarkdown 递归列出目录下的 Markdown 文件（137 的宿主原语）。
+ * 
+ * 三条口径：
+ *  1. **不跟随符号链接**（用 WalkDir，天然不跟随），避免环路与越界；
+ *  2. 隐藏目录（以 `.` / `_` 开头）与 node_modules/.git 跳过；
+ *  3. 单个子目录读不了（权限、被占用）**跳过并继续**，只有根目录本身不可读才报错 ——
+ *     扫盘是"给她挑文件"的辅助动作，不该因为一棵树里有一个坏目录就整个失败。
+ */
+export function ListMarkdown(dir: string, limit: number): $CancellablePromise<$models.MarkdownEntry[]> {
+    return $Call.ByID(1810937887, dir, limit).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
+/**
  * PickOpenFile 弹出原生打开对话框，默认定位到上次打开的目录（012 验收）。
  */
 export function PickOpenFile(): $CancellablePromise<string> {
@@ -60,7 +75,7 @@ export function ReadFile(path: string): $CancellablePromise<string> {
  */
 export function Stat(path: string): $CancellablePromise<$models.FileInfo | null> {
     return $Call.ByID(1643522548, path).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType3($result);
     });
 }
 
@@ -72,7 +87,7 @@ export function Stat(path: string): $CancellablePromise<$models.FileInfo | null>
  */
 export function TakeStartupFiles(): $CancellablePromise<string[]> {
     return $Call.ByID(3368106493).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType4($result);
     });
 }
 
@@ -93,6 +108,8 @@ export function WriteFileBase64(path: string, dataBase64: string): $CancellableP
 }
 
 // Private type creation functions
-const $$createType0 = $models.FileInfo.createFrom;
-const $$createType1 = $Create.Nullable($$createType0);
-const $$createType2 = $Create.Array($Create.Any);
+const $$createType0 = $models.MarkdownEntry.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $models.FileInfo.createFrom;
+const $$createType3 = $Create.Nullable($$createType2);
+const $$createType4 = $Create.Array($Create.Any);
