@@ -9,6 +9,8 @@
  * 用真的时间戳和真的磁盘测，会变成「看运气红不红」。
  */
 
+import { tf } from "../../i18n";
+
 /** 图片统一落进文档同级的 `assets/`（spec US-36 定的目录名） */
 export const ASSETS_DIR = "assets";
 
@@ -83,5 +85,5 @@ export async function planImage(opts: {
     const relPath = `${ASSETS_DIR}/${stamp}-${n}.${ext}`;
     if (!(await exists(relPath))) return { relPath, reused: false };
   }
-  throw new Error(`同一秒内图片序号超过 999，停手不写：${stamp}`);
+  throw new Error(tf("image.seqOverflow", { stamp }));
 }

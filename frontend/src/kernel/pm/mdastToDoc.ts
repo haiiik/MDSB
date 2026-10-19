@@ -1,5 +1,5 @@
 import { Node as PMNode, type Mark, type Schema } from "prosemirror-model";
-import { tf } from "../../i18n";
+import { t, tf } from "../../i18n";
 import { parseMd } from "../md";
 import { splitFootnoteDef } from "./footnoteBlock";
 import { splitInlineMath, splitMathBlock } from "./mathBlock";
@@ -62,11 +62,11 @@ function rawOf(source: string, node: AnyNode): string {
 function opaqueLabelFor(node: AnyNode): string {
   switch (node.type) {
     case "yaml":
-      return "文档属性（YAML）· 编辑模式不修改";
+      return t("opaque.yaml");
     case "html":
-      return "原始 HTML · 编辑模式不修改";
+      return t("opaque.html");
     case "footnoteDefinition":
-      return `脚注定义 [^${String(node.label ?? node.identifier ?? "?")}] · 编辑模式不修改`;
+      return tf("opaque.footnoteDef", { label: String(node.label ?? node.identifier ?? "?") });
     /**
      * 138-A：公式此刻在编辑模式还是占位（138-B 才做成「预览 + 就地改源码」）。
      * 占位里**必须带上她的原文**：只写「暂不支持的内容（math）」等于让编辑模式
@@ -76,7 +76,7 @@ function opaqueLabelFor(node: AnyNode): string {
     case "math":
       return tf("math.opaqueBlock", { src: "$$" + String(node.value ?? "") + "$$" });
     default:
-      return `暂不支持的内容（${node.type}）· 编辑模式不修改`;
+      return tf("opaque.unsupported", { type: node.type });
   }
 }
 

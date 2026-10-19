@@ -16,7 +16,7 @@ import {
   removeColumn,
   toggleFirstRowHeader,
 } from "../../src/kernel/pm/tableCommands";
-import { TABLE_MENU_ENTRIES, type Entry } from "../../src/kernel/pm/tableMenu";
+import { tableMenuEntries, type Entry } from "../../src/kernel/pm/tableMenu";
 
 /**
  * 112：表格结构操作。
@@ -349,7 +349,7 @@ describe("结构操作之后文档仍然合法", () => {
  */
 describe("右键菜单的置灰规则", () => {
   const labels = (state: EditorState): string[] =>
-    TABLE_MENU_ENTRIES.filter(
+    tableMenuEntries().filter(
       (e): e is Extract<Entry, { kind: "item" }> => e.kind === "item" && !commandApplies(e.command, state)
     ).map((e) => e.label);
 
@@ -380,11 +380,11 @@ describe("右键菜单的置灰规则", () => {
   });
 
   it("菜单项共 11 条 + 2 条分隔线，不含「设置列宽」（D9 明确不做）", () => {
-    const items = TABLE_MENU_ENTRIES.filter((e): e is Extract<Entry, { kind: "item" }> => e.kind === "item").map(
+    const items = tableMenuEntries().filter((e): e is Extract<Entry, { kind: "item" }> => e.kind === "item").map(
       (e) => e.label
     );
     expect(items).toHaveLength(11);
-    expect(TABLE_MENU_ENTRIES.filter((e) => e.kind === "sep")).toHaveLength(2);
+    expect(tableMenuEntries().filter((e) => e.kind === "sep")).toHaveLength(2);
     expect(items.join(",")).not.toContain("列宽");
   });
 });

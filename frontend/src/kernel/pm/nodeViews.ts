@@ -1,7 +1,7 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { EditorView, NodeView } from "prosemirror-view";
 import { TextSelection } from "prosemirror-state";
-import { t } from "../../i18n";
+import { t, tf } from "../../i18n";
 import { paintMath } from "../math";
 import { renderMermaid } from "../mermaid";
 import { addDismiss } from "../enhance";
@@ -19,7 +19,8 @@ import type { ThemeName } from "../render";
 const MERMAID_DEBOUNCE_MS = 250;
 
 /** 预览区上面那行提示（125 起把「双击改字」也写进去，功能要看得见） */
-const MERMAID_HINT = "双击图上的文字可直接改（回车或点别处提交）；点击图则改下方源码";
+/** 139：改成函数 —— 模块级常量等于在 import 那一刻就把语言烘死了，切成 English 也不会变 */
+const mermaidHint = () => t("mermaid.editHint");
 
 /**
  * 125：双击图上的文字 → 就地改 → 写回源码里那一段。
@@ -156,7 +157,7 @@ export function editableLabels(svg: SVGSVGElement, source: string): EditableLabe
       hit: textLeaf(box),
       target: { kind: "node", id },
       span: hits.length === 1 ? hits[0] : null,
-      reason: hits.length === 1 ? undefined : "同一个节点在源码里被定义了两次，改哪一处不确定。",
+      reason: hits.length === 1 ? undefined : t("mermaid.duplicateDefinition"),
     });
     taken.add(box);
   }
@@ -206,7 +207,7 @@ export function editableLabels(svg: SVGSVGElement, source: string): EditableLabe
       continue;
     }
     if (found.length > 1) {
-      out.push({ box, hit: html, target, span: null, reason: "这段文字在源码里出现多次，改哪一处不确定。" });
+      out.push({ box, hit: html, target, span: null, reason: t("mermaid.ambiguousMatch") });
       continue;
     }
     /*
@@ -228,12 +229,12 @@ export function editableLabels(svg: SVGSVGElement, source: string): EditableLabe
         hit: html,
         target,
         span: null,
-        reason: "这是实体名 / 状态名，关系行里还引用着它，只改这一处会让图对不上。请在源码里整段改。",
+        reason: t("mermaid.identifierLocked"),
       });
       continue;
     }
     if (generic.length > 1) {
-      out.push({ box, hit: html, target, span: null, reason: "这段文字在源码里出现多次，改哪一处不确定。" });
+      out.push({ box, hit: html, target, span: null, reason: t("mermaid.ambiguousMatch") });
     } else {
       // 屏幕上这行字在源码里一个字都找不到：多半是 mermaid 自己算出来的（饼图的百分比、
       // 甘特图的刻度）。这些**本来就不是用户写的**，改它没有意义，必须拒绝并说清为什么。
@@ -242,7 +243,7 @@ export function editableLabels(svg: SVGSVGElement, source: string): EditableLabe
         hit: html,
         target,
         span: null,
-        reason: `「${text}」是 mermaid 自己算出来或转义过的文字，源码里没有这一段，改不动。请在下面源码里改。`,
+        reason: tf("mermaid.notInSource", { text }),
       });
     }
   }
@@ -262,7 +263,7 @@ function markEditableLabels(svg: SVGSVGElement | null, source: string): void {
   if (!svg) return;
   for (const { hit, span, reason } of editableLabels(svg, source)) {
     hit.setAttribute("data-hp-label", span ? "1" : "no");
-    hit.setAttribute("title", span ? "双击修改这段文字" : reason ?? "这一处不能直接改");
+    hit.setAttribute("title", span ? t("mermaid.dblClickToEdit") : reason ?? t("mermaid.cannotEditHere"));
   }
 }
 
@@ -284,7 +285,8 @@ function markEditableLabels(svg: SVGSVGElement | null, source: string): void {
 
 /** 语言候选：与 M1 020 的「常见 25 种」口径对齐，未知语言原样保留并回退纯文本高亮 */
 export const CODE_LANGS: { value: string; label: string }[] = [
-  { value: "", label: "纯文本" },
+  // 空值 = 纯文本；标签在建 option 时按当前语言取（常量里烘中文 = 语言在 import 时定死）
+  { value: "", label: "" },
   { value: "json", label: "JSON" },
   { value: "yaml", label: "YAML" },
   { value: "toml", label: "TOML" },
@@ -340,7 +342,9 @@ export function codeBlockNodeView(
   for (const l of CODE_LANGS) {
     const opt = document.createElement("option");
     opt.value = l.value;
-    opt.textContent = l.label;
+    // 139：语言候选表是模块级常量，只有「纯文本」这一条是要翻译的界面文案，
+    // 所以它在使用点取字典，不在常量里烘死。
+    opt.textContent = l.value === "" ? t("code.plainText") : l.label;
     select.appendChild(opt);
   }
 
@@ -365,7 +369,7 @@ export function codeBlockNodeView(
   const previewHint = document.createElement("p");
   previewHint.className = "hp-mermaidbox__hint";
   previewHint.dataset.testid = "pm-mermaid-hint";
-  previewHint.textContent = MERMAID_HINT;
+  previewHint.textContent = mermaidHint();
 
   const previewSvg = document.createElement("div");
   previewSvg.className = "hp-mermaidbox__svg";
@@ -398,14 +402,14 @@ export function codeBlockNodeView(
       markEditableLabels(previewSvg.querySelector("svg"), source);
     } else {
       previewSvg.innerHTML = "";
-      previewError.textContent = "Mermaid 语法错误，图未渲染：" + (result.error ?? "");
+      previewError.textContent = t("mermaid.errorPrefix") + (result.error ?? "");
       preview.dataset.state = "error";
       // 127：编辑模式的原地预览里，错误也要能自己关掉。
       // 关掉用的是行内 style（见 addDismiss），所以这次报错必须把它清掉，
       // 否则「关过一次 → 改坏了 → 第二次报错」会看不见。
       previewError.hidden = false;
       previewError.style.display = "";
-      addDismiss(previewError, "关闭这个错误提示");
+      addDismiss(previewError, t("mermaid.dismissErrorTip"));
     }
   }
 
@@ -492,7 +496,7 @@ export function codeBlockNodeView(
     previewHint.textContent = text;
     previewHint.classList.add("is-warn");
     setTimeout(() => {
-      previewHint.textContent = MERMAID_HINT;
+      previewHint.textContent = mermaidHint();
       previewHint.classList.remove("is-warn");
     }, ms);
   }
@@ -524,7 +528,7 @@ export function codeBlockNodeView(
     const span = resolveSpan();
     if (!span) {
       // 双击到提交之间源码被别处改过（查找替换、手动编辑），位置不可信 —— 不动源码
-      return { state: "rejected", reason: "这段源码在双击之后又被别处改过，位置不可信，没有写入。请在下面源码里改。" };
+      return { state: "rejected", reason: t("mermaid.sourceMoved") };
     }
     const result = applyLabelEdit(source, span, text);
     if (!result.ok) return { state: "rejected", reason: result.reason };
@@ -676,7 +680,7 @@ export function codeBlockNodeView(
     const hit = 在字上 ?? 最小 ?? 标记祖先 ?? 同容器;
     if (!hit) return;
     if (!hit.span) {
-      flashHint(hit.reason ?? "这一处在源码里定位不唯一，为了不改坏图没有开启就地编辑。请在下面源码里改。");
+      flashHint(hit.reason ?? t("mermaid.ambiguousNoEdit"));
       return;
     }
     e.preventDefault();
@@ -720,13 +724,13 @@ export function codeBlockNodeView(
     // 未知语言（如 `klingon`）不在候选里：保留原值并显式提示，而不是悄悄丢掉标注
     const known = CODE_LANGS.some((l) => l.value === lang);
     select.value = known ? lang : "";
-    hint.textContent = known ? "" : `未识别的语言标注：${lang}（按纯文本高亮，标注会原样保存）`;
+    hint.textContent = known ? "" : tf("code.unknownLang", { lang });
     pre.dataset.language = lang;
     if (!known && lang) {
       // 把未知语言临时挂进去，保证下拉里能看到当前真实值
       const opt = document.createElement("option");
       opt.value = lang;
-      opt.textContent = `${lang}（未识别）`;
+      opt.textContent = tf("code.unknownLangOption", { lang });
       select.appendChild(opt);
       select.value = lang;
     }

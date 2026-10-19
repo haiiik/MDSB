@@ -13,6 +13,8 @@
  *    所以 104 的按块回写与 120 的保真矩阵不受影响。
  */
 
+import { t, tf } from "../i18n";
+
 export type LabelKind =
   /** flowchart 节点标签 `A[文字]` */
   | "node"
@@ -679,19 +681,19 @@ export type LabelEditResult = { ok: true; src: string; quoted: boolean } | { ok:
  */
 export function applyLabelEdit(src: string, span: LabelSpan, input: string): LabelEditResult {
   if (/\r?\n/.test(input) && !span.multiline) {
-    return { ok: false, reason: "这一处只能写一行（ER 的属性行、状态图的迁移标签都不支持换行）。" };
+    return { ok: false, reason: t("mermaid.oneLineOnly") };
   }
   // contenteditable 里的换行（Shift+Enter）只在支持的地方落成 mermaid 的 <br/>
   const text = (span.multiline ? input.replace(/\r?\n/g, "<br/>") : input).replace(/^\s+|\s+$/g, "");
-  if (!text) return { ok: false, reason: "标签不能是空的。要删掉这个节点，请在源码模式里改。" };
+  if (!text) return { ok: false, reason: t("mermaid.emptyLabel") };
   if (span.singleWord && /\s/.test(text)) {
-    return { ok: false, reason: "这一处是标识符（类型名 / 属性名 / 键标记），只能是一串不带空格的词。" };
+    return { ok: false, reason: t("mermaid.identifierRule") };
   }
   const breaksOut = span.close !== "" && text.includes(span.close);
   if (text.includes('"') && (breaksOut || span.quoted)) {
     return {
       ok: false,
-      reason: `这段文字里有双引号，还有「${span.close}」会提前结束标签的字符，直接写会破坏图的结构。请切源码模式改。`,
+      reason: tf("mermaid.wouldBreak", { text: span.close }),
     };
   }
   const quoted = span.quoted || breaksOut;

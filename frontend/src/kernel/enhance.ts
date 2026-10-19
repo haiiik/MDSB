@@ -1,4 +1,5 @@
 import type { Host } from "../host/types";
+import { t, tf } from "../i18n";
 import { settings } from "../state/settings";
 
 /**
@@ -39,10 +40,10 @@ export function enhanceCodeBlocks(root: HTMLElement): void {
       const toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "hp-code__fold";
-      toggle.textContent = `展开全部 ${lines.length} 行`;
+      toggle.textContent = tf("code.expand", { n: lines.length });
       toggle.addEventListener("click", () => {
         const folded = box.classList.toggle("is-folded");
-        toggle.textContent = folded ? `展开全部 ${lines.length} 行` : "收起";
+        toggle.textContent = folded ? tf("code.expand", { n: lines.length }) : t("code.collapse");
       });
       ops.appendChild(toggle);
     }
@@ -50,12 +51,12 @@ export function enhanceCodeBlocks(root: HTMLElement): void {
     const copy = document.createElement("button");
     copy.type = "button";
     copy.className = "hp-code__copy";
-    copy.textContent = "复制";
+    copy.textContent = t("code.copy");
     copy.addEventListener("click", async () => {
       // 复制的是原始代码文本，不含行号与工具条文字
       const ok = await copyText(code.textContent ?? "");
-      copy.textContent = ok ? "已复制" : "复制失败";
-      window.setTimeout(() => (copy.textContent = "复制"), 1500);
+      copy.textContent = ok ? t("code.copied") : t("code.copyFailed");
+      window.setTimeout(() => (copy.textContent = t("code.copy")), 1500);
     });
     ops.appendChild(copy);
 
@@ -100,7 +101,7 @@ async function copyText(text: string): Promise<boolean> {
  * 行内样式能压过任何非 `!important` 的作者声明，所以两个都写：
  * `hidden` 给语义/无障碍，行内 style 给实际效果。
  */
-export function addDismiss(box: HTMLElement, title = "关闭这条提示"): HTMLElement {
+export function addDismiss(box: HTMLElement, title = t("status.closeHint")): HTMLElement {
   const x = document.createElement("button");
   x.type = "button";
   x.className = "hp-dismiss";
@@ -136,20 +137,20 @@ export function enhanceImages(root: HTMLElement, host: Host): void {
       const name = origin.split(/[\\/]/).pop() ?? origin;
       const label = document.createElement("span");
       label.className = "hp-img-broken__label";
-      label.textContent = `图片无法显示：${name}`;
+      label.textContent = tf("image.broken", { name });
       const path = document.createElement("code");
       path.className = "hp-img-broken__path";
       path.textContent = origin;
       const copy = document.createElement("button");
       copy.type = "button";
       copy.className = "hp-img-broken__copy";
-      copy.textContent = "复制路径";
+      copy.textContent = t("image.copyPath");
       copy.addEventListener("click", (e) => {
         e.stopPropagation();
         void copyText(origin);
       });
       ph.append(label, path, copy);
-      addDismiss(ph, "关闭这条提示");
+      addDismiss(ph, t("status.closeHint"));
       img.replaceWith(ph);
     });
 
@@ -171,7 +172,7 @@ export function enhanceToc(root: HTMLElement): number {
     list.className = "hp-toc";
     const title = document.createElement("div");
     title.className = "hp-toc__title";
-    title.textContent = "目录";
+    title.textContent = t("toc.title");
     const ul = document.createElement("ul");
     for (const h of Array.from(root.querySelectorAll("h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]"))) {
       const li = document.createElement("li");
@@ -234,7 +235,7 @@ function showInLightbox(spec: LightboxSpec): void {
   info.textContent = spec.label;
   const hint = document.createElement("span");
   hint.className = "hp-lightbox__hint";
-  hint.textContent = "滚轮缩放 · 拖拽平移";
+  hint.textContent = t("lightbox.hint");
   const reset = document.createElement("button");
   reset.type = "button";
   reset.dataset.testid = "lightbox-fit";
@@ -242,7 +243,7 @@ function showInLightbox(spec: LightboxSpec): void {
   const close = document.createElement("button");
   close.type = "button";
   close.dataset.testid = "lightbox-close";
-  close.textContent = "关闭 (Esc)";
+  close.textContent = t("lightbox.close");
   bar.append(info, hint, reset, close);
   mask.appendChild(bar);
 
@@ -315,7 +316,7 @@ export function openLightbox(src: string, origin: string): void {
   showInLightbox({
     node: img,
     label: origin.split(/[\\/]/).pop() ?? "",
-    resetLabel: "原始尺寸",
+    resetLabel: t("lightbox.reset"),
     size: () => ({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 }),
     ready: (run) => img.addEventListener("load", run, { once: true }),
   });
@@ -329,7 +330,7 @@ export function openLightbox(src: string, origin: string): void {
  * 尺寸优先读 SVG 自己的 `width` / `viewBox`（124 起 `useMaxWidth:false`，
  * mermaid 给的是真实像素宽），量不到才退回 `getBoundingClientRect`。
  */
-export function openSvgLightbox(svg: SVGSVGElement, label = "Mermaid 图（双击可再次打开）"): void {
+export function openSvgLightbox(svg: SVGSVGElement, label = t("lightbox.mermaidTitle")): void {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.style.transform = "";
   const natural = (): { w: number; h: number } => {
@@ -351,5 +352,5 @@ export function openSvgLightbox(svg: SVGSVGElement, label = "Mermaid 图（双�
   clone.style.height = n.h + "px";
   clone.style.maxWidth = "none";
   clone.style.maxHeight = "none";
-  showInLightbox({ node: clone, label, resetLabel: "适应屏幕", size: () => n });
+  showInLightbox({ node: clone, label, resetLabel: t("lightbox.fit"), size: () => n });
 }

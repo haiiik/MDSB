@@ -8,6 +8,7 @@ import {
 import { schema as basicSchema } from "prosemirror-schema-basic";
 import { addListNodes } from "prosemirror-schema-list";
 import { tableNodes } from "prosemirror-tables";
+import { t } from "../../i18n";
 
 /**
  * 102：MDStar（项目内部名 mdsb，早期叫 HorseParty）所见即所得的正式 schema（从 025 的 spike 组合方式升级而来）。
@@ -40,7 +41,7 @@ const opaqueBlock = {
   toDOM: (node: PMNode): DOMOutputSpec => [
     "div",
     { "data-hp-opaque": "1", "data-testid": "opaque-block", class: "hp-opaque" },
-    String(node.attrs.label || "（此内容编辑模式不修改）"),
+    String(node.attrs.label || t("opaque.defaultLabel")),
   ],
 };
 

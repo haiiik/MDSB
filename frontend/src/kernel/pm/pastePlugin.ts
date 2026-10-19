@@ -1,5 +1,6 @@
 import { Fragment, Slice, type Node as PMNode } from "prosemirror-model";
 import { Plugin } from "prosemirror-state";
+import { tf } from "../../i18n";
 import { clipboardToMdast } from "../paste/clipboard";
 import { imageExt } from "../paste/images";
 import { mdastRootToNodes } from "./mdastToDoc";
@@ -86,7 +87,7 @@ export function richPastePlugin(opts: PasteImageOptions = {}): Plugin {
           if (!imageType || !parent.type.contentMatch.matchType(imageType)) {
             event.preventDefault();
             opts.onImageError?.(
-              `光标当前位置（${parent.type.name}）放不下图片 —— 先把光标放到正文里再粘。`
+              tf("paste.noRoomForImage", { where: parent.type.name })
             );
             return true;
           }

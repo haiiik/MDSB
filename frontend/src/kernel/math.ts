@@ -103,7 +103,7 @@ export type MathResult = { ok: true; html: string } | { ok: false; error: string
  * 只留 html 会「看着漂亮、听不见内容」，无障碍上算退化。
  */
 export function renderMath(rt: MathRuntime | null, src: string, display = false): MathResult {
-  if (!rt) return { ok: false, error: "KaTeX 尚未加载" };
+  if (!rt) return { ok: false, error: t("math.notLoaded") };
   try {
     return {
       ok: true,

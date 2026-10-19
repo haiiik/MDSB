@@ -1,4 +1,5 @@
 import { Plugin, TextSelection } from "prosemirror-state";
+import { t } from "../../i18n";
 import { addRowAfter, deleteRow, isInTable } from "prosemirror-tables";
 import type { Command } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
@@ -27,22 +28,28 @@ import {
 
 export type Entry = { kind: "sep" } | { kind: "item"; label: string; command: Command };
 
-/** 导出给测试用：断言菜单项集合与置灰规则，不必在测试里重抄一份标签 */
-export const TABLE_MENU_ENTRIES: Entry[] = [
-  { kind: "item", label: "上方插入行", command: insertRowBefore() },
-  { kind: "item", label: "下方插入行", command: addRowAfter },
-  { kind: "item", label: "上移一行", command: moveRow(-1) },
-  { kind: "item", label: "下移一行", command: moveRow(1) },
-  { kind: "sep" },
-  { kind: "item", label: "左侧插入列", command: insertColumn(-1) },
-  { kind: "item", label: "右侧插入列", command: insertColumn(1) },
-  { kind: "item", label: "左移一列", command: moveColumn(-1) },
-  { kind: "item", label: "右移一列", command: moveColumn(1) },
-  { kind: "sep" },
-  { kind: "item", label: "设为表头 / 取消表头", command: toggleFirstRowHeader() },
-  { kind: "item", label: "删除本行", command: deleteRow },
-  { kind: "item", label: "删除本列", command: removeColumn() },
-];
+/**
+ * 菜单项。**是函数不是常量**：133 那轮把界面文案收进字典之后，
+ * 常量等于「模块第一次 import 时就把语言烘死了」，设置里切成 English 也来不及（她要的是当场生效）。
+ * 菜单每次右键都重建，所以调一次取一次最新语言的标签。
+ */
+export function tableMenuEntries(): Entry[] {
+  return [
+    { kind: "item", label: t("table.addRowAbove"), command: insertRowBefore() },
+    { kind: "item", label: t("table.addRowBelow"), command: addRowAfter },
+    { kind: "item", label: t("table.moveRowUp"), command: moveRow(-1) },
+    { kind: "item", label: t("table.moveRowDown"), command: moveRow(1) },
+    { kind: "sep" },
+    { kind: "item", label: t("table.addColumnLeft"), command: insertColumn(-1) },
+    { kind: "item", label: t("table.addColumnRight"), command: insertColumn(1) },
+    { kind: "item", label: t("table.moveColumnLeft"), command: moveColumn(-1) },
+    { kind: "item", label: t("table.moveColumnRight"), command: moveColumn(1) },
+    { kind: "sep" },
+    { kind: "item", label: t("table.toggleHeader"), command: toggleFirstRowHeader() },
+    { kind: "item", label: t("table.deleteRow"), command: deleteRow },
+    { kind: "item", label: t("table.deleteColumn"), command: removeColumn() },
+  ];
+}
 
 let openMenu: HTMLElement | null = null;
 let cleanup: (() => void) | null = null;
@@ -83,7 +90,7 @@ function showMenu(view: EditorView, x: number, y: number) {
   menu.className = "hp-tablemenu";
   menu.dataset.testid = "table-menu";
 
-  for (const entry of TABLE_MENU_ENTRIES) {
+  for (const entry of tableMenuEntries()) {
     if (entry.kind === "sep") {
       const sep = document.createElement("div");
       sep.className = "hp-tablemenu__sep";

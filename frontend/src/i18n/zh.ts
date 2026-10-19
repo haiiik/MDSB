@@ -133,6 +133,71 @@ const zh = {
   "doclink.insert": "插入",
   "doclink.capped": "已截断显示前 {n} 条，继续输关键词缩小范围",
   "doclink.scanError": "扫描目录失败：{msg}",
+
+  // ==== 139：JS 直接写进 DOM 的那批（133 的门禁只扫 .vue 模板，整批从缝里漏了出去） ====
+  // 代码块工具条（020）
+  "code.expand": "展开全部 {n} 行",
+  "code.collapse": "收起",
+  "code.copy": "复制",
+  "code.copied": "已复制",
+  "code.copyFailed": "复制失败",
+  "code.plainText": "纯文本",
+  "code.unknownLang": "未识别的语言标注：{lang}（按纯文本高亮，标注会原样保存）",
+  "code.unknownLangOption": "{lang}（未识别）",
+  // 图片失效占位（021）
+  "image.broken": "图片无法显示：{name}",
+  "image.copyPath": "复制路径",
+  "image.seqOverflow": "同一秒内图片序号超过 999，停手不写：{stamp}",
+  // [TOC]（022）
+  "toc.title": "目录",
+  // 灯箱（021 / 127）
+  "lightbox.hint": "滚轮缩放 · 拖拽平移",
+  "lightbox.close": "关闭 (Esc)",
+  "lightbox.reset": "原始尺寸",
+  "lightbox.fit": "适应屏幕",
+  "lightbox.mermaidTitle": "Mermaid 图（双击可再次打开）",
+  // Mermaid 阅读侧（019 / 020）
+  "mermaid.zoomHint": "双击看大图（滚轮缩放、拖拽平移）",
+  "mermaid.diagram": "Mermaid 图",
+  "mermaid.errorBlockTitle": "Mermaid 语法错误，图未渲染。以下为原始源码：",
+  "mermaid.errorPrefix": "Mermaid 语法错误，图未渲染：",
+  "mermaid.dismissErrorBlock": "关闭这个错误块",
+  "mermaid.dismissErrorTip": "关闭这个错误提示",
+  "mermaid.editHint": "双击图上的文字可直接改（回车或点别处提交）；点击图则改下方源码",
+  // 双击改字的拒绝理由（126 / 127：被拒时必须说清为什么，不能默默不理会）
+  "mermaid.duplicateDefinition": "同一个节点在源码里被定义了两次，改哪一处不确定。",
+  "mermaid.ambiguousMatch": "这段文字在源码里出现多次，改哪一处不确定。",
+  "mermaid.identifierLocked": "这是实体名 / 状态名，关系行里还引用着它，只改这一处会让图对不上。请在源码里整段改。",
+  "mermaid.notInSource": "「{text}」是 mermaid 自己算出来或转义过的文字，源码里没有这一段，改不动。请在下面源码里改。",
+  "mermaid.sourceMoved": "这段源码在双击之后又被别处改过，位置不可信，没有写入。请在下面源码里改。",
+  "mermaid.ambiguousNoEdit": "这一处在源码里定位不唯一，为了不改坏图没有开启就地编辑。请在下面源码里改。",
+  "mermaid.dblClickToEdit": "双击修改这段文字",
+  "mermaid.cannotEditHere": "这一处不能直接改",
+  "mermaid.oneLineOnly": "这一处只能写一行（ER 的属性行、状态图的迁移标签都不支持换行）。",
+  "mermaid.emptyLabel": "标签不能是空的。要删掉这个节点，请在源码模式里改。",
+  "mermaid.identifierRule": "这一处是标识符（类型名 / 属性名 / 键标记），只能是一串不带空格的词。",
+  "mermaid.wouldBreak": "这段文字里有双引号，还有「{text}」会提前结束标签的字符，直接写会破坏图的结构。请切源码模式改。",
+  "math.notLoaded": "公式渲染组件尚未加载",
+  // 编辑模式里看得见的占位说明（102 / 103）
+  "opaque.defaultLabel": "（此内容编辑模式不修改）",
+  "opaque.yaml": "文档属性（YAML）· 编辑模式不修改",
+  "opaque.html": "原始 HTML · 编辑模式不修改",
+  "opaque.footnoteDef": "脚注定义 [^{label}] · 编辑模式不修改",
+  "opaque.unsupported": "暂不支持的内容（{type}）· 编辑模式不修改",
+  // 粘贴（116）
+  "paste.noRoomForImage": "光标当前位置（{where}）放不下图片 —— 先把光标放到正文里再粘。",
+  // 表格右键菜单（112）
+  "table.addRowAbove": "上方插入行",
+  "table.addRowBelow": "下方插入行",
+  "table.moveRowUp": "上移一行",
+  "table.moveRowDown": "下移一行",
+  "table.addColumnLeft": "左侧插入列",
+  "table.addColumnRight": "右侧插入列",
+  "table.moveColumnLeft": "左移一列",
+  "table.moveColumnRight": "右移一列",
+  "table.toggleHeader": "设为表头 / 取消表头",
+  "table.deleteRow": "删除本行",
+  "table.deleteColumn": "删除本列",
 } as const;
 
 export default zh;

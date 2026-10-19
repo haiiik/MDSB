@@ -1,5 +1,6 @@
 import type { ThemeName } from "./render";
 import { addDismiss, openSvgLightbox } from "./enhance";
+import { t } from "../i18n";
 import { createTextMeasurer, preWrapMermaid } from "./mermaidLabels";
 
 /**
@@ -120,11 +121,11 @@ export async function hydrateMermaid(root: HTMLElement, opts: MermaidOptions): P
        * 再叠一层「停在图上时只缩放这张」就成了同一个手势两种含义。
        * 只在阅读档做：编辑档的双击已经是「改字」（125/126/127），两个语义不能抢同一处。
        */
-      box.title = "双击看大图（滚轮缩放、拖拽平移）";
+      box.title = t("mermaid.zoomHint");
       box.dataset.testid = "mermaid-diagram";
       box.addEventListener("dblclick", () => {
         const s = box.querySelector("svg");
-        if (s) openSvgLightbox(s as SVGSVGElement, "Mermaid 图");
+        if (s) openSvgLightbox(s as SVGSVGElement, t("mermaid.diagram"));
       });
       done++;
       continue;
@@ -135,7 +136,7 @@ export async function hydrateMermaid(root: HTMLElement, opts: MermaidOptions): P
 
     const title = document.createElement("p");
     title.className = "hp-mermaid__error-title";
-    title.textContent = "Mermaid 语法错误，图未渲染。以下为原始源码：";
+    title.textContent = t("mermaid.errorBlockTitle");
 
     const pre = document.createElement("pre");
     const err = document.createElement("code");
@@ -148,7 +149,7 @@ export async function hydrateMermaid(root: HTMLElement, opts: MermaidOptions): P
 
     box.replaceChildren(title, pre, detail);
     // 127：错误块也要能自己关掉（叉在右边）
-    addDismiss(box, "关闭这个错误块");
+    addDismiss(box, t("mermaid.dismissErrorBlock"));
   }
 
   return done;
