@@ -124,7 +124,7 @@ export async function openPath(path: string): Promise<boolean> {
     return true;
   } catch (e) {
     // 打开失败时还没有标签可挂错误，所以记一条全局的（空态也会显示）
-    globalError.value = `无法打开「${baseName(path)}」：` + (e instanceof Error ? e.message : String(e));
+    globalError.value = tf("open.cannotOpenDetail", { name: baseName(path), error: e instanceof Error ? e.message : String(e) });
     return false;
   }
 }
@@ -235,7 +235,7 @@ export function setMode(mode: Mode) {
 export const MODE_CYCLE: Mode[] = ["read", "edit", "source"];
 
 import type { MsgKey } from "../i18n";
-import { t } from "../i18n";
+import { t, tf } from "../i18n";
 
 /**
  * 三档模式的显示名，**只这一份**（原来 StatusBar 与 TabBar 各写了一份，

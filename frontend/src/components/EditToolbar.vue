@@ -59,22 +59,31 @@ const blocked = computed(() => s.value.inCode || s.value.inTable);
 /** 行内标记（粗/斜/链接）的可用性：只有代码块里不适用，表格里照样能加粗/加链接 */
 const marksBlocked = computed(() => s.value.inCode);
 
-const ITEMS: Item[] = [
-  { kind: "block", id: "paragraph", label: "正文", title: "正文段落", target: { kind: "paragraph" } },
-  { kind: "block", id: "h1", label: "H1", title: "一级标题", target: { kind: "heading", level: 1 } },
-  { kind: "block", id: "h2", label: "H2", title: "二级标题", target: { kind: "heading", level: 2 } },
-  { kind: "block", id: "h3", label: "H3", title: "三级标题", target: { kind: "heading", level: 3 } },
-  { kind: "sep", id: "sep1" },
-  { kind: "block", id: "quote", label: "引用", title: "引用块（再点取消）", target: { kind: "quote" } },
-  { kind: "block", id: "code", label: "代码块", title: "代码围栏", target: { kind: "code" } },
-  { kind: "sep", id: "sep2" },
-  { kind: "block", id: "bullet", label: "无序", title: "无序列表（再点提出列表）", target: { kind: "bullet" } },
-  { kind: "block", id: "ordered", label: "有序", title: "有序列表", target: { kind: "ordered" } },
-  { kind: "block", id: "task", label: "任务", title: "任务项（再点取消勾选）", target: { kind: "task" } },
-  { kind: "sep", id: "sep3" },
-  { kind: "mark", id: "bold", label: "粗", title: "加粗", which: "bold" },
-  { kind: "mark", id: "italic", label: "斜", title: "斜体", which: "italic" },
-];
+/**
+ * 139：**清单做成函数而不是模块级常量** —— 常量等于在 import 那一刻就把语言烘死，
+ * 切到 English 也不会变（`tableMenu.ts` 同一个坑，同一个解法）。
+ */
+function items(): Item[] {
+  return [
+    { kind: "block", id: "paragraph", label: t("tb.body"), title: t("tb.bodyTitle"), target: { kind: "paragraph" } },
+    { kind: "block", id: "h1", label: "H1", title: t("tb.h1Title"), target: { kind: "heading", level: 1 } },
+    { kind: "block", id: "h2", label: "H2", title: t("tb.h2Title"), target: { kind: "heading", level: 2 } },
+    { kind: "block", id: "h3", label: "H3", title: t("tb.h3Title"), target: { kind: "heading", level: 3 } },
+    { kind: "sep", id: "sep1" },
+    { kind: "block", id: "quote", label: t("tb.quote"), title: t("tb.quoteTitle"), target: { kind: "quote" } },
+    { kind: "block", id: "code", label: t("tb.code"), title: t("tb.codeTitle"), target: { kind: "code" } },
+    { kind: "sep", id: "sep2" },
+    { kind: "block", id: "bullet", label: t("tb.bullet"), title: t("tb.bulletTitle"), target: { kind: "bullet" } },
+    { kind: "block", id: "ordered", label: t("tb.ordered"), title: t("tb.orderedTitle"), target: { kind: "ordered" } },
+    { kind: "block", id: "task", label: t("tb.task"), title: t("tb.taskTitle"), target: { kind: "task" } },
+    { kind: "sep", id: "sep3" },
+    { kind: "mark", id: "bold", label: t("tb.bold"), title: t("tb.boldTitle"), which: "bold" },
+    { kind: "mark", id: "italic", label: t("tb.italic"), title: t("tb.italicTitle"), which: "italic" },
+  ];
+}
+
+/** 语言是响应式的：切语言后这一份要跟着换，所以走 computed 而不是常量 */
+const ITEMS = computed(items);
 
 /** 当前项是否高亮：与 toolbarState 同一份数据源，不另算一套 */
 function active(item: Item): boolean {
@@ -179,7 +188,7 @@ function applyLink() {
           @keydown.esc="linkOpen = false"
         />
         <button class="edit-toolbar__btn" data-testid="tb-link-apply" type="button" @click="applyLink">
-          确定
+          {{ t("toolbar.linkOk") }}
         </button>
         <button
           class="edit-toolbar__btn"
@@ -188,7 +197,7 @@ function applyLink() {
           type="button"
           @click="emit('link', '')"
         >
-          清除
+          {{ t("toolbar.linkClear") }}
         </button>
       </template>
     </span>

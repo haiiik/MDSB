@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t } from "../i18n";
+import { t, tf } from "../i18n";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { activeMarkdown, activeTab, getHost, globalError } from "../state/documents";
 import { panel, toggleCollapsed } from "../state/panel";
@@ -56,9 +56,9 @@ async function clickRecent(path: string) {
   const ok = await openRecent(path);
   if (!ok) {
     await confirm({
-      title: "文件打不开",
-      message: `「${baseName(path)}」已不存在或无法读取。\n${path}`,
-      actions: ["知道了"],
+      title: t("sidebar.fileUnopenable"),
+      message: tf("sidebar.unopenableMsg", { name: baseName(path), path }),
+      actions: [t("dialog.gotIt")],
     });
   }
 }
@@ -150,16 +150,16 @@ onBeforeUnmount(() => {
 
 /** 127：三档都要能跳 —— 交给当前模式注册的跳转器（阅读按 id、编辑按第 n 个标题、源码按第 n 个标题行） */
 function jump(h: HeadingItem) {
-  if (!jumpTo({ id: h.id, index: h.index })) globalError.value = `找不到小节：${h.text}`;
+  if (!jumpTo({ id: h.id, index: h.index })) globalError.value = tf("nav.notFound", { text: h.text });
 }
 
 async function askClear() {
   const choice = await confirm({
     title: t('sidebar.clearAll'),
-    message: "清空后已打开的标签不受影响。",
-    actions: ["清空"],
+    message: t("sidebar.clearHint"),
+    actions: [t("sidebar.clear")],
   });
-  if (choice === "清空") await clearAllRecent();
+  if (choice === t("sidebar.clear")) await clearAllRecent();
 }
 
 function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number; hidden: boolean }> {
@@ -349,7 +349,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
         @click="menuReveal"
       >{{ t('menu.reveal') }}</li>
       <li class="menu__sep" />
-      <li data-testid="recent-menu-pin" @click="menuPin">{{ menuPinned ? "取消置顶" : "置顶" }}</li>
+      <li data-testid="recent-menu-pin" @click="menuPin">{{ menuPinned ? t('sidebar.unpin') : t('sidebar.pin') }}</li>
       <li data-testid="recent-menu-remove" @click="menuRemove">{{ t('sidebar.remove') }}</li>
     </ul>
   </div>

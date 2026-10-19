@@ -80,6 +80,7 @@ async function runSelfCheck(h: Host) {
     const back = await h.getState(key);
     await h.setState(key, "");
     state.value = back === probe ? "pass" : "fail";
+    // i18n-allow: 宿主自检面板的诊断文本（回读值原样打印出来给人看形状），不是给她读的界面文案
     detail.value = back === probe ? "getState / setState 往返正常" : `回读不一致：${JSON.stringify(back)}`;
   } catch (e) {
     state.value = "fail";
@@ -395,7 +396,7 @@ function onWheel(e: WheelEvent) {
       <div class="pane__empty-actions">
         <button class="pane__open" data-testid="new-button" @click="createUntitled">{{ t("empty.new") }}</button>
         <button class="pane__open pane__open--ghost" data-testid="open-button" @click="$emit('open')">
-          打开 Markdown 文件
+          {{ t("empty.open") }}
         </button>
       </div>
       <p class="placeholder">{{ t("empty.hint") }}</p>
@@ -406,12 +407,12 @@ function onWheel(e: WheelEvent) {
           <span class="check__state">
             {{
               state === "pass"
-                ? "通过"
+                ? t("check.pass")
                 : state === "fail"
-                  ? "失败"
+                  ? t("check.fail")
                   : state === "running"
-                    ? "进行中"
-                    : "等待宿主"
+                    ? t("check.running")
+                    : t("check.waiting")
             }}
           </span>
           <span v-if="detail" class="check__detail">{{ detail }}</span>

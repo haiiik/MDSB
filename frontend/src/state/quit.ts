@@ -1,3 +1,4 @@
+import { t, tf } from "../i18n";
 import { getHost, isDirty, saveTab, saveTabAs, tabs, type Tab } from "./documents";
 import { confirm } from "./dialogs";
 import { flushAutoSaves } from "./autosave";
@@ -28,31 +29,35 @@ export async function confirmQuit(): Promise<boolean> {
 
   const flushed = await flushAutoSaves();
   if (!flushed) {
-    await confirm({ title: "自动保存未完成", message: autoSaveError.value, actions: ["知道了"] });
+    await confirm({ title: t("quit.autoSavePending"), message: autoSaveError.value, actions: [t("dialog.gotIt")] });
   }
 
   const dirty = tabs.list.filter(isDirty);
   if (dirty.length > 0) {
+    // 139：按钮文案进字典之后，**判据不能再拿中文串当哨兵** —— 先把两个动作存成局部量，
+    // 传进去和比出来用的是同一个值，切英文也不会认不出点的是哪颗。
+    const saveAndExit = t("quit.saveAndExit");
+    const discardAndExit = t("quit.discardAndExit");
     const choice = await confirm({
-      title: "退出 MDStar",
+      title: t("quit.title"),
       message:
         dirty.length === 1
-          ? `「${dirty[0].name}」有未保存的改动。` +
-            (dirty[0].path ? "" : "\n这份还没保存过，保存会先让你选存放位置。")
-          : `有 ${dirty.length} 个标签存在未保存的改动：\n` + dirty.map((t) => "· " + t.name).join("\n"),
-      actions: ["保存并退出", "丢弃并退出"],
+          ? tf("quit.dirtyOne", { name: dirty[0].name }) +
+            (dirty[0].path ? "" : t("quit.dirtyNewNote"))
+          : tf("quit.dirtyMany", { n: dirty.length, list: dirty.map((tab) => "· " + tab.name).join("\n") }),
+      actions: [saveAndExit, discardAndExit],
     });
     if (choice === null) return false;
-    if (choice === "保存并退出") {
-      for (const t of dirty) {
-        const r = await saveOne(t);
+    if (choice === saveAndExit) {
+      for (const tab of dirty) {
+        const r = await saveOne(tab);
         if (!r.ok) {
           // 未命名文档在保存对话框里点了取消 = 不退了，安静地留在应用里
           if (r.error === "已取消") return false;
           await confirm({
-            title: "保存失败，已中止退出",
-            message: `${t.name}：${r.error ?? ""}`,
-            actions: ["知道了"],
+            title: t("quit.saveFailedTitle"),
+            message: tf("quit.saveFailedMsg", { name: tab.name, error: r.error ?? "" }),
+            actions: [t("dialog.gotIt")],
           });
           return false;
         }

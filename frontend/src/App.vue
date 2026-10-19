@@ -191,7 +191,7 @@ async function onKeydown(e: KeyboardEvent) {
     const r = await saveAny(t);
     if (r.ok) tabError.delete(t.id);
     else if (r.error !== "已取消") {
-      await confirm({ title: "保存失败", message: r.error ?? "未知错误", actions: ["知道了"] });
+      await confirm({ title: msg("dialog.saveFailed"), message: r.error ?? msg("dialog.unknownError"), actions: [msg("dialog.gotIt")] });
     }
   } else if (key === ",") {
     e.preventDefault();

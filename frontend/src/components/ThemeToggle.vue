@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { t, tf } from "../i18n";
+import { computed } from "vue";
 import { view } from "../state/view";
 
 /**
@@ -13,22 +15,23 @@ import { view } from "../state/view";
  * - 值仍然只有 `view.theme` 一个来源（浅色 / 深色），设置里那条**删掉**，不留第二个入口 ——
  *   两处入口迟早会打架（122 收模式切换按钮时定的口径）。
  */
-const orders = [
-  { value: "light", label: "浅色", testid: "theme-light" },
-  { value: "dark", label: "深色", testid: "theme-dark" },
-] as const;
+/** 139：档位标签是界面文案，走字典；且做成 computed（常量会把语言烘死在 import 那一刻） */
+const orders = computed(() => [
+  { value: "light" as const, label: t("theme.light"), testid: "theme-light" },
+  { value: "dark" as const, label: t("theme.dark"), testid: "theme-dark" },
+]);
 </script>
 
 <template>
-  <div class="themepill" role="group" aria-label="主题" data-testid="theme-switch">
+  <div class="themepill" role="group" :aria-label="t('theme.label')" data-testid="theme-switch">
     <span class="themepill__thumb" :data-dark="view.theme === 'dark' ? '1' : '0'" aria-hidden="true" />
     <button
       v-for="o in orders"
       :key="o.value"
       class="themepill__btn"
       type="button"
-      :title="`${o.label}主题`"
-      :aria-label="`${o.label}主题`"
+      :title="tf('theme.pick', { label: o.label })"
+      :aria-label="tf('theme.pick', { label: o.label })"
       :aria-pressed="view.theme === o.value"
       :data-testid="o.testid"
       @click="view.theme = o.value"

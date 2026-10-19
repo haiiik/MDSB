@@ -65,7 +65,9 @@ onBeforeUnmount(() => {
       data-testid="status-stats"
       :title="tf('status.statsTitle', { cjk: stats.cjk, latin: stats.latin })"
     >
-      {{ stats.words }} 字 · {{ stats.lines }} 行 · {{ stats.headings }} 标题
+      {{ tf("status.words", { words: stats.words }) }} ·
+      {{ tf("status.lines", { lines: stats.lines }) }} ·
+      {{ tf("status.headings", { headings: stats.headings }) }}
     </span>
     <span v-if="!activeTab" class="statusbar__item placeholder" data-testid="status-not-opened">{{ t("status.notOpened") }}</span>
     <!--
@@ -137,7 +139,7 @@ onBeforeUnmount(() => {
         data-testid="status-dirty"
         :title="t('status.dirty')"
       >
-        未保存
+        {{ t("status.dirtyShort") }}
       </span>
     </template>
   </footer>

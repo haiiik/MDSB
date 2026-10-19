@@ -28,11 +28,17 @@ const replaceInput = ref<HTMLInputElement | null>(null);
 const count = computed(() => formatCount(search.matches.length, search.current));
 const canReplace = computed(() => searchAdapter()?.canReplace ?? false);
 
-const OPTIONS = [
-  { key: "caseSensitive", label: "Aa", title: "区分大小写" },
-  { key: "wholeWord", label: "全词", title: "全词匹配" },
-  { key: "regex", label: ".*", title: "正则表达式" },
-] as const;
+/** 这三个 key 是判断依据（喂 `setSearchOptions`），所以字面量类型要留着，不能退成 string */
+type SearchOptionKey = "caseSensitive" | "wholeWord" | "regex";
+
+/**
+ * 139：文案走字典，且做成 computed —— 模块级常量会把语言烘死在 import 那一刻。
+ */
+const OPTIONS = computed<{ key: SearchOptionKey; label: string; title: string }[]>(() => [
+  { key: "caseSensitive", label: "Aa", title: t("search.caseTitle") },
+  { key: "wholeWord", label: t("search.wholeLabel"), title: t("search.wholeTitle") },
+  { key: "regex", label: ".*", title: t("search.regexTitle") },
+]);
 
 function focusInput(): void {
   void nextTick(() => {
@@ -146,7 +152,7 @@ watch(
       />
       <button data-testid="replace-one" :disabled="!search.matches.length" @click="replaceCurrent()">{{ t("search.replace") }}</button>
       <button data-testid="replace-all" :disabled="!search.matches.length" @click="replaceAllMatches()">
-        替换全部
+        {{ t("search.replaceAll") }}
       </button>
     </div>
 
