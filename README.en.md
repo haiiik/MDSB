@@ -1,6 +1,6 @@
 <p align="center">
   <img src="docs/screenshots/logo.svg" width="88" alt="MDStar logo">
-  <h1 align="center">MDStar</h1>
+  <h1 align="center">MDStar Browser</h1>
   <p align="center"><b>Markdown Star Browser</b> — a desktop Markdown reader / editor for Windows</p>
 </p>
 
@@ -10,11 +10,13 @@ Built from scratch, runs fully offline in a single executable.
 
 ## Screenshots
 
-> UI screenshots are in Chinese; an English interface is on the roadmap.
+> The screenshots are taken in the Chinese UI; switch **Settings → Language → English** for the English interface.
 
-| Reading | Editing | Mermaid | Code block |
-| --- | --- | --- | --- |
-| <img src="docs/screenshots/01-read.png" alt="reading" width="260"> | <img src="docs/screenshots/02-edit.png" alt="editing" width="260"> | <img src="docs/screenshots/03-mermaid.png" alt="mermaid" width="260"> | <img src="docs/screenshots/04-code-block.png" alt="code block" width="260"> |
+| Reading | Editing |
+| --- | --- |
+| <img src="docs/screenshots/01-read.png" alt="reading" width="470"> | <img src="docs/screenshots/02-edit.png" alt="editing" width="470"> |
+| **Mermaid** | **Code block** |
+| <img src="docs/screenshots/03-mermaid.png" alt="mermaid" width="470"> | <img src="docs/screenshots/04-code-block.png" alt="code block" width="470"> |
 
 **Light and dark themes** (the sun / moon toggle right of the gear in the tab bar):
 
@@ -31,7 +33,10 @@ Built from scratch, runs fully offline in a single executable.
 - Local image path resolution; broken images show their path with a copy button
 - Double-click a large image to open a lightbox: wheel to zoom, drag to pan, one click to fit the screen
 - Code blocks: collapse, line numbers, copy button, language label
+- Math (KaTeX): inline `$…$` and block `$$…$$`; a broken formula degrades to "source + error mark" instead of disappearing
+- Footnotes: `[^1]` references and definitions, click to jump down, click ↩ to jump back
 - Word count
+- Chinese / English UI (switch in Settings, also chosen at install time)
 
 **Editing**
 
@@ -40,7 +45,9 @@ Built from scratch, runs fully offline in a single executable.
 - Table structure operations: insert/delete and move rows and columns, promote a row to header
 - Undo has a sensible granularity: typing merges automatically, structural edits count as one step each, "replace all" reverts in one undo
 - Switching modes keeps state: each mode remembers its own scroll position, selection and undo stack
-- Find and replace behave identically across the three modes (match count and highlights always agree)
+- Find and replace behave identically across the three modes (match count and highlights always agree); the search box composes Chinese input normally
+- Math edits in place: a block shows rendered output above and its source below; editing touches only that block and keeps the `$$` skeleton as written
+- Footnote definitions are editable in place; "insert document link" picks a file under the current document's folder and writes a relative path
 
 **Mermaid**
 
@@ -81,7 +88,7 @@ Wails v3 (Go) + WebView2 · ProseMirror (own schema and mapping layer) · CodeMi
 - `alt` text and paths of existing images must be changed in source mode
 - Untitled (never saved) documents have no crash snapshot or cross-restart restore
 - Long documents (above ~90 KB) take 1–2 seconds to enter editing mode
-- No macOS / Linux build; no plugin system, Word/PDF export, multiple windows or LaTeX
+- No macOS / Linux build; no plugin system, Word/PDF export or multiple windows
 
 ## License
 

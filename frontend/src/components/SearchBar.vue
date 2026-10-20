@@ -53,7 +53,54 @@ function onToggleReplace(): void {
   if (search.withReplace) void nextTick(() => replaceInput.value?.focus());
 }
 
+/**
+ * 140：**输入法组合期不能打断**（她的报告：查找框输入一个字符就断、中文打不出来）。
+ *
+ * 三处各自都会掐断组合，缺一不可一起修：
+ *  ① 组合期间把值推给 store → 重算命中 → 适配器往正文里落选区/滚动 →
+ *     Chromium 的 DOM 选区被抢走，拼音串当场作废；
+ *  ② 用 Enter / 空格选候选词时，`keydown` 也照样发过来（`isComposing: true`），
+ *     我们把它当成「跳到下一个命中」并 `preventDefault` → 候选词选不上；
+ *  ③ 阅读模式的退化路径每敲一下就 `removeAllRanges()`，同样掐断组合（在 searchDom 里挡）。
+ * 所以：组合期间**不推值**，`compositionend` 那一刻推一次；组合期间的按键一律不拦。
+ */
+/*
+ * 两个框**各一份**标记：只有一枚共享 ref 时，替换框开始组合会把查找框也一起「哑掉」，
+ * 而组合中途失焦（切窗口、点别处）时浏览器可能不再补发 compositionend，
+ * 那枚标记就永远卡在 true —— 之后每一笔输入都被吞掉，等于这条修过的洞重新裂开。
+ * 所以：各自的标记 + `input` 事件自带的 `isComposing` 双保险 + 失焦即复位。
+ */
+const composingFind = ref(false);
+const composingReplace = ref(false);
+
+/** 组合期一律不推值：推了就会重算命中并往正文落选区，拼音串当场被掐断 */
+function inComposition(e: Event, flag: { value: boolean }): boolean {
+  return flag.value || (e as InputEvent).isComposing === true;
+}
+
+function onFindInput(e: Event): void {
+  if (inComposition(e, composingFind)) return;
+  setSearchQuery((e.target as HTMLInputElement).value);
+}
+
+function onCompositionEnd(e: CompositionEvent): void {
+  composingFind.value = false;
+  setSearchQuery((e.target as HTMLInputElement).value);
+}
+
+function onReplaceInput(e: Event): void {
+  if (inComposition(e, composingReplace)) return;
+  search.replacement = (e.target as HTMLInputElement).value;
+}
+
+function onReplaceCompositionEnd(e: CompositionEvent): void {
+  composingReplace.value = false;
+  search.replacement = (e.target as HTMLInputElement).value;
+}
+
 function onKeydown(e: KeyboardEvent): void {
+  // 组合期间的按键属于输入法（选词、翻页、回车上屏），一个都不许拦
+  if (e.isComposing) return;
   // Esc 只关查找条：拦住冒泡，别让外壳的「关闭标签 / 退出」也吃到这一下
   if (e.key === "Escape") {
     e.stopPropagation();
@@ -67,6 +114,7 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 function onReplaceKeydown(e: KeyboardEvent): void {
+  if (e.isComposing) return;
   if (e.key === "Escape") {
     e.stopPropagation();
     closeSearch();
@@ -100,7 +148,10 @@ watch(
         :value="search.query"
         :placeholder="t('search.find')"
         spellcheck="false"
-        @input="setSearchQuery(($event.target as HTMLInputElement).value)"
+        @input="onFindInput"
+        @compositionstart="composingFind = true"
+        @compositionend="onCompositionEnd"
+        @blur="composingFind = false"
       />
       <span
         class="searchbar__count"
@@ -148,7 +199,10 @@ watch(
         :placeholder="t('search.replaceWith')"
         spellcheck="false"
         @keydown="onReplaceKeydown"
-        @input="search.replacement = ($event.target as HTMLInputElement).value"
+        @input="onReplaceInput"
+        @compositionstart="composingReplace = true"
+        @blur="composingReplace = false"
+        @compositionend="onReplaceCompositionEnd"
       />
       <button data-testid="replace-one" :disabled="!search.matches.length" @click="replaceCurrent()">{{ t("search.replace") }}</button>
       <button data-testid="replace-all" :disabled="!search.matches.length" @click="replaceAllMatches()">

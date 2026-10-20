@@ -9,6 +9,7 @@ import { closeHistory, history, redo, undo } from "prosemirror-history";
 import { EditorView } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
 import { patch } from "../kernel/blockPatch";
+import { domTopAnchor, scrollDomToAnchor } from "../kernel/anchors";
 import { mdastToDoc } from "../kernel/pm/mdastToDoc";
 import { codeBlockNodeView, mathBlockNodeView } from "../kernel/pm/nodeViews";
 import { hpInputRules } from "../kernel/pm/inputRules";
@@ -275,7 +276,7 @@ function editorProps(state: EditorState): DirectEditorProps {
         revealImages();
         // 118：查找条开着时，文档一变就重算 —— 计数与高亮必须始终一致（验收第一条）。
         // 放在 docChanged 分支里而不是每次事务：光标移动的事务不该触发全文重扫。
-        if (searchState.open) recomputeSearch();
+        if (searchState.open) recomputeSearch(false);
       }
       // 工具栏的高亮与置灰要跟着选区走，所以**只移动光标的事务也要刷**
       if (tr.docChanged || tr.selectionSet || tr.storedMarksSet) tbRev.value++;
@@ -310,7 +311,7 @@ function attach(tabId: string, state: EditorState, parseMs = 0): void {
   registerSearchAdapter(pmAdapter);
   tbRev.value++;
   revealImages();
-  if (searchState.open) recomputeSearch();
+  if (searchState.open) recomputeSearch(false);
 }
 
 /**
@@ -445,6 +446,13 @@ defineExpose({
     sc.scrollTop = Math.max(0, el.getBoundingClientRect().top - base - 12);
     return true;
   },
+  /**
+   * 140：跨模式定位的两个口子（同 SourceView 那一对，理由也一样的那条不再写一遍）。
+   * 编辑档的块就是 PM 文档的顶层节点，选择器是它自己的事。
+   */
+  topAnchor: () => domTopAnchor(scroller.value, ".ProseMirror > *"),
+  applyAnchor: (needle: string, near = -1) =>
+    scrollDomToAnchor(scroller.value, ".ProseMirror > *", needle, near),
 });
 </script>
 

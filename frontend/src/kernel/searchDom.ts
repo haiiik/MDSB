@@ -15,6 +15,14 @@ import type { SearchAdapter } from "../state/search";
 
 type Run = { from: number; to: number; node: Text };
 
+/** 焦点是不是在「正在输入」的地方（输入框 / textarea / contenteditable） */
+function isEditingField(): boolean {
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable === true;
+}
+
 const HIGHLIGHT_ALL = "hp-search";
 const HIGHLIGHT_CURRENT = "hp-search-current";
 
@@ -48,7 +56,9 @@ export function makeDomAdapter(root: () => HTMLElement | null, scroller: () => H
       CSS.highlights.delete(HIGHLIGHT_ALL);
       CSS.highlights.delete(HIGHLIGHT_CURRENT);
     }
-    window.getSelection()?.removeAllRanges();
+    // 焦点在输入框里时**别动文档选区**：Chromium 下 removeAllRanges() 会打断输入法组合，
+    // 表现就是查找框里敲第二个字没反应（140 她的报告）
+    if (!isEditingField()) window.getSelection()?.removeAllRanges();
   };
 
   return {
@@ -57,7 +67,7 @@ export function makeDomAdapter(root: () => HTMLElement | null, scroller: () => H
       return cached.text;
     },
     canReplace: false, // 阅读模式只读
-    apply(matches, current) {
+    apply(matches, current, reveal) {
       refresh();
       clear();
       if (!matches.length) return;
@@ -70,11 +80,13 @@ export function makeDomAdapter(root: () => HTMLElement | null, scroller: () => H
         CSS.highlights.set(HIGHLIGHT_ALL, new Highlight(...ranges.filter((_, i) => i !== current)));
         if (current >= 0 && ranges[current]) {
           CSS.highlights.set(HIGHLIGHT_CURRENT, new Highlight(ranges[current]));
-          scrollToRange(scroller(), ranges[current]);
+          if (reveal) scrollToRange(scroller(), ranges[current]);
         }
         return;
       }
-      if (current >= 0 && ranges[current]) {
+      // 退化路径（老 WebView2 没有 Highlight API）只能靠选区画当前项 —— 这条**会动 DOM 选区**，
+      // 所以同样只在 reveal 时做，否则打字途中会把输入框的输入法组合期打断
+      if (reveal && current >= 0 && ranges[current]) {
         const sel = window.getSelection();
         sel?.removeAllRanges();
         sel?.addRange(ranges[current]);

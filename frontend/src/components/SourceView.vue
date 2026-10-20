@@ -12,6 +12,7 @@ import {
   syntaxHighlighting,
 } from "@codemirror/language";
 import { makeCmAdapter, searchHighlightExtension } from "../kernel/searchCm";
+import { anchorText, domTopAnchor, ANCHOR_KEY, ANCHOR_KEY_SHORT, pickAnchorPos } from "../kernel/anchors";
 import { registerSearchAdapter, recomputeIfOpen, unregisterSearchAdapter } from "../state/search";
 import {
   HINT_EDIT_TO_SOURCE,
@@ -204,6 +205,44 @@ defineExpose({
       }
     }
     return false;
+  },
+  /**
+   * 140：跨模式定位的两个口子，由 EditorPane 在换档时调用。
+   *
+   * 为什么选择器写在这里而不是让外壳去查 `.cm-line`：那是 CodeMirror 的内部类名，
+   * 写进 EditorPane 就会被打进**主入口 chunk**，而「冷启动分包」那条守门判据按**内容**查
+   * （主入口里不许出现 PM/CM 的痕迹）—— 实测泄漏一次红一次。
+   * 源码档是异步组件，主入口本来不该认识它；通用逻辑在 kernel，档位私有形状留给档位。
+   */
+  topAnchor: () => domTopAnchor(view?.scrollDOM ?? null, ".cm-line"),
+  /**
+   * 把"顶端那一段字"所在的那一行滚到视口上沿。
+   * 跨模式定位按**内容**落点，不按 scrollTop 比例 —— 三档内容高度不同，
+   * 比例换算在真壳里实测会差到 3 段（浏览器里恰好看不出来）。
+   */
+  applyAnchor: (needle: string, near = -1) => {
+    if (!view || !needle) return false;
+    const 视 = view;
+    // 先按**全长键**找，配不到再退到短键；命中的行可能不止一条（重复标题），
+    // 交给 pickAnchorPos 按「离预测位置最近」挑 —— 按文档顺序挑会认错段。
+    const 扫 = (n: number) => {
+      const 键 = needle.slice(0, n);
+      const out: Array<{ text: string; top: number }> = [];
+      if (!键) return out;
+      for (let i = 1; i <= 视.state.doc.lines; i++) {
+        const l = 视.state.doc.line(i);
+        const t = anchorText(l.text);
+        if (!t.startsWith(键)) continue;
+        out.push({ text: t, top: 视.lineBlockAt(l.from).top });
+      }
+      return out;
+    };
+    let 命中 = 扫(Math.min(needle.length, ANCHOR_KEY));
+    if (命中.length === 0) 命中 = 扫(Math.min(needle.length, ANCHOR_KEY_SHORT));
+    const v = pickAnchorPos(命中, needle, near);
+    if (v < 0) return false;
+    view.scrollDOM.scrollTop = v;
+    return true;
   },
 });
 </script>

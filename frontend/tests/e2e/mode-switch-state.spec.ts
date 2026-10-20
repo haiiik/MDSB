@@ -26,18 +26,18 @@ let path = "";
  * 所以「关掉标签再打开」那条要重新注入一次，否则第二次开回来的是内置的 欢迎.md
  * —— 第一版就红在这里，报的是「找不到段落」，看着像模式切换的缺陷，其实是夹具没打开。
  */
-async function inject(page: Page): Promise<void> {
+async function inject(page: Page, 内容 = DOC): Promise<void> {
   await page.evaluate(([p, c]) => {
     (window as unknown as { __hpMockSeedFile?: (a: string, b: string) => void }).__hpMockSeedFile!(p, c);
     (window as unknown as { __hpMockPickPath?: string }).__hpMockPickPath = p;
-  }, [path, DOC]);
+  }, [path, 内容]);
 }
 
-async function seedAndOpen(page: Page): Promise<void> {
+async function seedAndOpen(page: Page, 内容 = DOC): Promise<void> {
   path = "/demo/切换-" + test.info().title.replace(/[^\w一-龥]+/g, "-") + ".md";
   await freshSession(page);
   await gotoApp(page);
-  await inject(page);
+  await inject(page, 内容);
   await page.getByTestId("tab-open").click();
   await expect(page.getByTestId("document-root")).toBeVisible();
 }
@@ -192,25 +192,276 @@ test("源码自己的撤销栈：切出去再切回来还在（切回来时内�
   await expect(page.locator(".cm-content")).not.toContainText("源码打的字");
 });
 
-test("三档各自的滚动位置独立记忆，切回时停在原处", async ({ page }) => {
-  await seedAndOpen(page);
-  await setMode(page, "edit");
-  await scrollTo(page, EDIT_SCROLL, 300);
+/**
+ * 140（她：「切换模式时定位到相同位置」）。
+ *
+ * 这条**取代** 119 那条「三档各自独立记忆滚动位置」：各档内容高度不同
+ * （渲染 DOM / PM / 源码行），把 scrollTop 原样搬过去落到的是别的内容上，
+ * 所以她看到的是"切一下模式就跑回上面去"。现在换算的是相对位置，
+ * 判据也按她真正在意的那件事下 —— **视口顶端是不是还停在同一段**。
+ */
+const 比例 = (page: Page, sel: string) =>
+  page.evaluate((s) => {
+    const el = document.querySelector<HTMLElement>(s);
+    if (!el) return -1;
+    const max = el.scrollHeight - el.clientHeight;
+    return max <= 0 ? 0 : el.scrollTop / max;
+  }, sel);
 
+/** 视口顶端那一段的段号（三档都数得出来：阅读/编辑看段落，源码看那一行） */
+const 顶部段号 = (page: Page, 条目: string, 容器: string) =>
+  page.evaluate(
+    ([itemSel, boxSel]) => {
+      const box = document.querySelector<HTMLElement>(boxSel);
+      if (!box) return -99;
+      const 线 = box.getBoundingClientRect().top + 24;
+      for (const el of Array.from(document.querySelectorAll(itemSel))) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom > 线) {
+          // 用 [0-9] 而不是 \d：这行字面量是脚本写进去的，反斜杠在这一层被吞过一次
+          // 源码档里"顶端那一行"常是空行（md 段落之间有空行），所以要**跳过不匹配的行**，
+          // 取顶端往下第一个数得出来的段号
+          const m = (el.textContent ?? "").match(/第 ([0-9]+) 段/);
+          if (m) return Number(m[1]);
+        }
+      }
+      return -2;
+    },
+    [条目, 容器]
+  );
+
+/** 与起点段号的差（还没渲染出段号时返回 99，让 poll 继续等而不是当场判红） */
+const 段号差 = (page: Page, 条目: string, 容器: string, 起点: number) =>
+  page
+    .evaluate(
+      ([itemSel, boxSel]) => {
+        const box = document.querySelector<HTMLElement>(boxSel);
+        if (!box) return -99;
+        const 线 = box.getBoundingClientRect().top + 24;
+        for (const el of Array.from(document.querySelectorAll(itemSel))) {
+          const r = el.getBoundingClientRect();
+          if (r.bottom > 线) {
+            const m = (el.textContent ?? "").match(/第 ([0-9]+) 段/);
+            if (m) return Number(m[1]);
+          }
+        }
+        return -1;
+      },
+      [条目, 容器]
+    )
+    .then((n) => (n < 0 ? 99 : Math.abs(n - 起点)));
+
+test("三档换档落到同一段内容（相对位置换算，不是搬 scrollTop 像素）", async ({ page }) => {
+  await seedAndOpen(page);
   await setMode(page, "read");
   await scrollTo(page, READ_SCROLL, 700);
+  const 起点 = await 顶部段号(page, ".hp-doc p", READ_SCROLL);
+  expect(起点, "夹具没滚开，这条判据就没意义了").toBeGreaterThan(5);
+  const 原比例 = await 比例(page, READ_SCROLL);
+  expect(原比例).toBeGreaterThan(0.05);
+
+  // 四条判据一律用 poll：编辑/源码是异步组件，4 worker 并行时"落点还没稳"是常态，
+  // 当场读一次会把负载抖动读成产品缺陷（本轮全量跑就这么红过一次）
+  await setMode(page, "edit");
+  await expect.poll(() => 段号差(page, ".ProseMirror p", EDIT_SCROLL, 起点), { timeout: 8000 }).toBeLessThanOrEqual(1);
+  // 搬像素的话编辑档会落在别处：编辑档内容更矮，700px 的比例会比阅读档大 —— 这里要的是比例一致
+  await expect
+    .poll(async () => Math.abs((await 比例(page, EDIT_SCROLL)) - 原比例), { timeout: 8000 })
+    .toBeLessThanOrEqual(0.08);
 
   await setMode(page, "source");
-  await scrollTo(page, SOURCE_SCROLL, 150);
+  await expect.poll(() => 段号差(page, ".cm-line", SOURCE_SCROLL, 起点), { timeout: 8000 }).toBeLessThanOrEqual(1);
+
+  // 绕一圈回来仍停在原来那一段附近（各档记忆已被换算同步，不该弹回顶部）
+  await setMode(page, "read");
+  await expect.poll(() => 段号差(page, ".hp-doc p", READ_SCROLL, 起点), { timeout: 8000 }).toBeLessThanOrEqual(1);
+});
+
+/**
+ * 140 review 补的两篇夹具。
+ *
+ * 原来这篇夹具全是干净的「第 N 段正文」，于是锚点机制的两个破口一个都没被测到：
+ * ① 顶端段落带 `[文字](地址)` 时，源码行有括号而渲染后的 DOM 没有 —— 键配不上，只能退回比例；
+ * ② 短标题重复出现时，「文档里第一个配得上的」会撞到更早的那一句。
+ * 她这条要求写的是「定位到相同位置」，这两类正是她文档里最常见的形状。
+ */
+/*
+ * 夹具里的换行一律用 `String.fromCharCode(10)` 拼，**不写反斜杠转义**：
+ * 这段内容经由工具链写进文件时 `\n` 被还原成过真实换行，字符串字面量当场断掉
+ * （Playwright 报的是「No tests found」，看着像文件没测试，其实是语法被吃了）。
+ */
+const NL = String.fromCharCode(10);
+const 空行 = NL + NL;
+
+const 带链接的DOC =
+  "# 带链接的样本" + 空行 +
+  Array.from({ length: 60 }, (_, i) => `铺垫 ${i + 1}：这一段没有花活，只负责把位置拉开。`).join(空行) +
+  空行 +
+  "打开 [审批时效看板](https://example.com/board) 看第一列的口径。" + 空行 +
+  "再看一张 ![说明截图](assets/pic.png) 图，图下面这句才是目标段。" + 空行 +
+  Array.from({ length: 40 }, (_, i) => `收尾 ${i + 1}：继续撑高度。`).join(空行) +
+  NL;
+
+const 重复标题DOC =
+  "# 重复短标题的样本" + 空行 +
+  "## 概述" + 空行 +
+  Array.from({ length: 60 }, (_, i) => `中间段 ${i + 1}，把两份「概述」拉开距离。`).join(空行) +
+  空行 +
+  "## 细节" + 空行 +
+  "一句细节。" + 空行 +
+  "## 概述" + 空行 +
+  "这第二句「概述」才是换档要落的地方。" + 空行 +
+  // 目标后面还得有正文：不然它根本滚不到顶（scrollTo 那道「等落位」会先红），
+  // 而这个夹具的全部意义就是「第二个概述停在视口顶端」
+  Array.from({ length: 40 }, (_, i) => `尾段 ${i + 1}：让第二处概述能滚到视口上沿。`).join(空行) + NL;
+
+
+const 顶端文字 = (page: Page, 条目: string, 容器: string) =>
+  page.evaluate(
+    ([itemSel, boxSel]) => {
+      const box = document.querySelector<HTMLElement>(boxSel);
+      if (!box) return "";
+      const 压 = (s: string) => {
+        let o = "";
+        for (const c of s) if (c.charCodeAt(0) > 32) o += c;
+        return o;
+      };
+      const 线 = box.getBoundingClientRect().top + 12;
+      for (const el of Array.from(box.querySelectorAll(itemSel))) {
+        if (el.getBoundingClientRect().bottom <= 线) continue;
+        const t = 压(el.textContent ?? "");
+        if (t) return t.slice(0, 14);
+      }
+      return "";
+    },
+    [条目, 容器]
+  );
+/** 视口顶端那一块**和它后面那块**的文字 —— 两个同名小标题只有靠下一块才分得清是哪一处 */
+const 顶端两块 = (page: Page, 条目: string, 容器: string) =>
+  page.evaluate(
+    ([itemSel, boxSel]) => {
+      const box = document.querySelector<HTMLElement>(boxSel);
+      if (!box) return "";
+      const 压 = (t: string) => {
+        let o = "";
+        for (const c of t) if (c.charCodeAt(0) > 32) o += c;
+        return o;
+      };
+      const 块 = Array.from(box.querySelectorAll(itemSel));
+      const 线 = box.getBoundingClientRect().top + 12;
+      for (let i = 0; i < 块.length; i++) {
+        const t = 压(块[i].textContent ?? "");
+        if (块[i].getBoundingClientRect().bottom <= 线 || !t) continue;
+        return t.slice(0, 10) + "|" + 压(块[i + 1]?.textContent ?? "").slice(0, 10);
+      }
+      return "";
+    },
+    [条目, 容器]
+  );
+
+test("顶端段落带链接或图片时，换档仍落在同一段（键两边归一化到同一个）", async ({ page }) => {
+  await seedAndOpen(page, 带链接的DOC);
+  await setMode(page, "read");
+  await page.waitForSelector('[data-testid="document-root"]');
+  const 偏移 = await page.evaluate(() => {
+    const box = document.querySelector<HTMLElement>(".pane__scroller");
+    const 目标 = Array.from(document.querySelectorAll(".hp-doc > *")).find((el) =>
+      (el.textContent ?? "").includes("审批时效看板")
+    );
+    if (!box || !目标) return -1;
+    return Math.round(目标.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop);
+  });
+  expect(偏移, "夹具里找不到带链接那句").toBeGreaterThan(0);
+  // scrollTo 里带了「等 scrollTop 真的等于目标值」这一道：内容不够长时被夹小、平滑滚动没落位，都会在这儿红
+  await scrollTo(page, READ_SCROLL, 偏移 - 12);
+  const 阅读顶端 = await 顶端文字(page, ".hp-doc > *", READ_SCROLL);
+  expect(阅读顶端, "夹具没把带链接那句滚到顶端，下面的判据就没意义").toContain("审批时效看板");
+
+  await setMode(page, "source");
+  await page.waitForSelector(".cm-content");
+  // 源码那一行带着 `[…](…)`，归一化之后必须与渲染文字同键；配不上会静默退回比例（真壳里实测偏 3 段）
+  await expect
+    .poll(() => 顶端文字(page, ".cm-line", SOURCE_SCROLL), { timeout: 8000 })
+    .toContain("审批时效看板");
+});
+
+test("重复短标题：换档按「离预测位置最近」挑，不换到前面那句同名的", async ({ page }) => {
+  await seedAndOpen(page, 重复标题DOC);
+  await setMode(page, "read");
+  await page.waitForSelector('[data-testid="document-root"]');
+  // 目标是**第二个** `## 概述`：它的键只有「概述」两个字，文档前面还有一个一模一样的
+  const 偏移 = await page.evaluate(() => {
+    const box = document.querySelector<HTMLElement>(".pane__scroller");
+    const 全部 = Array.from(document.querySelectorAll(".hp-doc > *")).filter(
+      (el) => (el.textContent ?? "").trim() === "概述"
+    );
+    if (!box || 全部.length !== 2) return -1;
+    const 目标 = 全部[1];
+    return Math.round(目标.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop);
+  });
+  expect(偏移, "夹具里应该正好有两个同名的「概述」小标题").toBeGreaterThan(0);
+  await scrollTo(page, READ_SCROLL, 偏移 - 12);
+  const 阅读顶端 = await 顶端两块(page, ".hp-doc > *", READ_SCROLL);
+  expect(阅读顶端, "夹具没停在第二个概述上（下一句才是那段的正文）").toContain("这第二句");
 
   await setMode(page, "edit");
-  await expect.poll(() => scrollTopOf(page, EDIT_SCROLL), { timeout: 3000 }).toBe(300);
+  await page.waitForSelector(".ProseMirror");
+  // 按「文档里第一个配得上的」挑就会落到前面那个概述（下一块是「中间段 1」）—— 这才是这条要防的错
+  await expect
+    .poll(() => 顶端两块(page, ".ProseMirror > *", EDIT_SCROLL), { timeout: 8000 })
+    .toContain("这第二句");
+});
+
+const 乙篇DOC =
+  "# 乙篇" + 空行 +
+  Array.from({ length: 30 }, (_, i) => `第 ${i + 1} 段（乙篇）：另一篇文档，起始就在顶上。`).join(空行) + NL;
+
+test("换档当帧就切标签：没兑现完的那笔换算作废，另一篇不被拽到旧位置", async ({ page }) => {
+  /*
+   * 档是**按标签记的**（`tab.mode`）：在乙篇上点「源码」，紧接着同一帧切回甲篇，
+   * 甲篇仍是阅读档。真正的风险在另一头 ——
+   * 第二次回位由 rAF 补，回调执行时活动标签已经是甲篇了，
+   * 于是那笔「为乙篇做的换算」可能拿着甲篇顶端那段字去找落点（review 抓的泄漏）。
+   * 这里把两边都钉住：甲篇一步没动，乙篇切回来仍停在自己开头。
+   */
+  await seedAndOpen(page);
   await setMode(page, "read");
-  await expect.poll(() => scrollTopOf(page, READ_SCROLL), { timeout: 3000 }).toBe(700);
-  // 源码模式这一档单独记一条：CM 首帧用估算行高建 heightmap，测准后会重新换算滚动位置，
-  // 实测「设 150 停在 266」—— EditorPane 的 rAF 补一帧就是为它，别把这条当噪声删掉
-  await setMode(page, "source");
-  await expect.poll(() => scrollTopOf(page, SOURCE_SCROLL), { timeout: 3000 }).toBe(150);
+  await scrollTo(page, READ_SCROLL, 700);
+  const 起点 = await 顶部段号(page, ".hp-doc p", READ_SCROLL);
+  expect(起点, "甲篇没滚开，这条判据就没意义").toBeGreaterThan(5);
+
+  // 乙篇另开一份**真文件**（未命名标签在阅读档不渲染正文，拿它当夹具会红在别处）
+  await page.evaluate(([p, c]) => {
+    (window as unknown as { __hpMockSeedFile?: (a: string, b: string) => void }).__hpMockSeedFile!(p, c);
+    (window as unknown as { __hpMockPickPath?: string }).__hpMockPickPath = p;
+  }, ["/demo/切换-乙篇.md", 乙篇DOC]);
+  await page.getByTestId("tab-open").click();
+  await expect(page.getByTestId("tabbar").locator(".tab")).toHaveCount(2);
+  await page.waitForSelector('[data-testid="document-root"]');
+  expect(await 顶部段号(page, ".hp-doc p", READ_SCROLL), "乙篇应当停在开头").toBeLessThanOrEqual(2);
+
+  // 同一个任务里：先给乙篇换到源码档，再切回甲篇 —— 第二次回位就会撞上「活动标签已经换了」
+  await page.evaluate(() => {
+    document.querySelector<HTMLElement>('[data-testid="mode-source"]')!.click();
+    document.querySelectorAll<HTMLElement>(".tab")[0].click();
+  });
+  await page.waitForTimeout(700);
+
+  // 甲篇仍是阅读档，且仍停在它自己那一段（既没被换成源码档，也没被拽走）
+  await expect(page.locator(".pane__scroller")).toBeVisible();
+  await expect
+    .poll(() => 段号差(page, ".hp-doc p", READ_SCROLL, 起点), { timeout: 8000 })
+    .toBeLessThanOrEqual(0);
+
+  // 切回乙篇：它的源码档落的是**乙篇自己**的开头，不是甲篇第 N 段那种位置
+  await page.locator(".tab").nth(1).click();
+  await page.waitForSelector(".cm-content");
+  await page.waitForTimeout(600);
+  const 乙源码顶 = await 顶部段号(page, ".cm-line", SOURCE_SCROLL);
+  expect(
+    乙源码顶 === -2 || 乙源码顶 <= 3,
+    `乙篇被甲篇那笔没兑现完的换算拽到了第 ${乙源码顶} 段`
+  ).toBeTruthy();
 });
 
 test("阅读模式是只读的：切过去不改内容、不多一个脏点", async ({ page }) => {

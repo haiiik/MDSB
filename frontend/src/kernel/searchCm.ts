@@ -61,13 +61,14 @@ export function makeCmAdapter(getView: () => EditorView | null): SearchAdapter {
   return {
     text: () => getView()?.state.doc.toString() ?? "",
     canReplace: true,
-    apply(matches, current) {
+    apply(matches, current, reveal) {
       last = matches;
       lastCurrent = current;
       const view = getView();
       if (!view) return;
       view.dispatch({ effects: setSearchMatches.of({ matches, current }) });
-      if (current >= 0 && matches[current]) {
+      // 选区 + 滚动留给「按 Enter / 点下一个」：打字途中抢选区会打断输入法组合（140）
+      if (reveal && current >= 0 && matches[current]) {
         const m = matches[current];
         view.dispatch({ selection: { anchor: m.from, head: m.to }, scrollIntoView: true });
       }

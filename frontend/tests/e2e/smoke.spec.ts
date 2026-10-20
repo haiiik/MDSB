@@ -30,7 +30,11 @@ test("空态文案可见", async ({ page }) => {
 const 宿主是mock = (page: Page) =>
   page.evaluate(() => typeof (window as unknown as Record<string, unknown>).__hpMockSeedFile === "function");
 
-test("宿主判定为 mock，且状态袋自检通过", async ({ page }) => {
+/**
+ * 140：空态那块「宿主自检」面板按她的话删了（"没用就删了"），
+ * 所以这条只留**宿主判定**与**版本行**两件事，不再断言自检那行字。
+ */
+test("宿主判定为 mock（状态袋自检面板已随 140 删除）", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.locator(".statusbar")).not.toContainText("宿主=");
@@ -40,9 +44,8 @@ test("宿主判定为 mock，且状态袋自检通过", async ({ page }) => {
   await expect(版本).toContainText("MDStar v");
   await expect(版本).not.toContainText("wails");
 
-  const check = page.locator(".check");
-  await expect(check).toBeVisible();
-  await expect(check).toContainText("通过", { timeout: 5_000 });
+  // 自检面板删了：这块 DOM 不该还在（删干净了才算这条过）
+  await expect(page.locator(".check")).toHaveCount(0);
 });
 
 test("?host=mock 显式覆盖：与自动判定结果一致", async ({ page }) => {
@@ -51,5 +54,5 @@ test("?host=mock 显式覆盖：与自动判定结果一致", async ({ page }) =
   await page.getByTestId("open-settings").click();
   await expect(page.getByTestId("setting-version")).toContainText("MDStar v");
   await page.getByTestId("settings-close").click();
-  await expect(page.locator(".check")).toContainText("通过", { timeout: 5_000 });
+  await expect(page.locator(".check")).toHaveCount(0);
 });

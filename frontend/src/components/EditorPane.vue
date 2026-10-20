@@ -2,6 +2,7 @@
 import { t } from "../i18n";
 import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 import { hydrate } from "../kernel/hydrate";
+import { domTopAnchor, ratioOf, scrollTopFor, scrollDomToAnchor } from "../kernel/anchors";
 import { mountRender, type WidthPreset } from "../kernel/render";
 import type { Host } from "../host/types";
 import {
@@ -10,6 +11,7 @@ import {
   getHost,
   globalError,
   tabError,
+  tabs,
   updateMarkdown,
   type Mode,
 } from "../state/documents";
@@ -66,28 +68,6 @@ function ensureDomAdapter(active: boolean): void {
   }
 }
 
-type CheckState = "idle" | "running" | "pass" | "fail";
-const state = ref<CheckState>("idle");
-const detail = ref("");
-
-/** 宿主自检：走状态袋做一次「写-读-删」往返，两种宿主都必须可用 */
-async function runSelfCheck(h: Host) {
-  state.value = "running";
-  const key = "selfcheck.v1";
-  const probe = "hp-" + Date.now();
-  try {
-    await h.setState(key, probe);
-    const back = await h.getState(key);
-    await h.setState(key, "");
-    state.value = back === probe ? "pass" : "fail";
-    // i18n-allow: 宿主自检面板的诊断文本（回读值原样打印出来给人看形状），不是给她读的界面文案
-    detail.value = back === probe ? "getState / setState 往返正常" : `回读不一致：${JSON.stringify(back)}`;
-  } catch (e) {
-    state.value = "fail";
-    detail.value = e instanceof Error ? e.message : String(e);
-  }
-}
-
 const currentError = computed(() => {
   const t = activeTab.value;
   return (t ? tabError.get(t.id) ?? null : null) || globalError.value || null;
@@ -109,22 +89,163 @@ function dismissError(): void {
 let restoring = false;
 let restoreTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** 各档的滚动容器（读几何要用，别只记 scrollTop） */
+function scrollerOf(mode: Mode): HTMLElement | null {
+  if (mode === "read") return readScroller.value;
+  if (mode === "source") return source.value?.scrollDOM() ?? null;
+  return edit.value?.scrollDOM() ?? null;
+}
+
+/**
+ * 每个标签**在每一档最后一次可见时的几何**（内容高 / 视口高）。
+ * 换档那一刻旧档的 DOM 往往已经没了，所以不能到时候才去量 —— 滚动事件里顺手记。
+ * 键是「标签 + 档」而不是只有档：三档的容器在标签之间是复用的，
+ * 只按档记的话，甲篇滚出来的锚点会被乙篇的换档用掉（140 那条时序用例实测就是这个）。
+ */
+const geom = new Map<string, { content: number; view: number }>();
+/** 这篇文档上一次停在哪一档（按标签记，切标签不该做位置换算） */
+const lastMode = new Map<string, Mode>();
+
+/** 各档「视口顶端那一段」的文字前缀 —— 换档后要找回来的是**内容位置**，不是像素 */
+const anchorByMode = new Map<string, string>();
+
+/** 「标签 × 档」这把复合键：锚点与几何都得按篇分，理由见上面那条注释 */
+const gk = (tabId: string, mode: Mode) => tabId + "|" + mode;
+
+/**
+ * 阅读档的块选择器。渲染容器就在本组件的模板里（不是懒加载档位），
+ * 所以这条留在外壳；编辑/源码两档的选择器**归各自组件**，
+ * 免得这些内部类名被写进主入口 chunk（冷启动分包那条判据按内容查，泄漏一次红一次）。
+ */
+const READ_BLOCK_SEL = ".hp-doc > *";
+
+/** 问某一档「你视口顶端是哪一段」；档位组件还没挂上就返回空串（换档那刻走比例兜底） */
+function topAnchor(mode: Mode): string {
+  if (mode === "read") return domTopAnchor(readScroller.value, READ_BLOCK_SEL);
+  if (mode === "edit") return edit.value?.topAnchor() ?? "";
+  return source.value?.topAnchor() ?? "";
+}
+
+/** 把「顶端那一段字」所在的那一块滚到上沿；`near` 是比例预测的位置，用来在同名块里挑最近的那个 */
+function applyAnchor(mode: Mode, needle: string, near: number): boolean {
+  if (!needle) return false;
+  if (mode === "read") return scrollDomToAnchor(readScroller.value, READ_BLOCK_SEL, needle, near);
+  if (mode === "edit") return edit.value?.applyAnchor(needle, near) ?? false;
+  return source.value?.applyAnchor(needle, near) ?? false;
+}
+
+/**
+ * 记一次「这一档此刻的几何 + 视口顶端那段字」。
+ *
+ * 两个都**同步**做完，不留到下一帧：140 第一版把锚点改成 rAF 合并（省得每帧遍历块做
+ * getBoundingClientRect），真壳里立刻红 —— WebView2 里滚动是平滑动画、rAF 又可能被节流，
+ * 换档那一刻读到的锚点是**动画中途**那一段（探针实测：阅读档停在铺垫 30，源码档落到铺垫 22）。
+ * 正确性优先：换档时用户能接受的代价是几毫秒的遍历，不是落错段。
+ */
+function noteGeom(mode: Mode): void {
+  const tab = activeTab.value;
+  const el = scrollerOf(mode);
+  if (!tab || !el) return;
+  geom.set(gk(tab.id, mode), { content: el.scrollHeight, view: el.clientHeight });
+  if (el.clientHeight > 0) anchorByMode.set(gk(tab.id, mode), topAnchor(mode));
+}
+
+/**
+ * 一次「刚换档」的定位请求：**优先按内容锚点**（顶端那一段字），比例只兜底。
+ *
+ * 为什么不能只用比例：三档内容高度不同（渲染 DOM / PM / 源码行），
+ * 比例换算在真壳里实测差到 3 段（浏览器 E2E 恰好看不出来 —— 桌面第 19 段先红的）。
+ *
+ * 为什么要留着而不是当场算完就丢：目标档的 DOM 常常还没测准 ——
+ * 编辑/源码是异步组件（第一次回位时 ref 还是 null）、CM 首帧按**估算行高**建 heightmap
+ * （实测「设 150 停在 266」）、阅读档 hydrate 完图片与 Mermaid 还会撑高。
+ * 所以一笔换档最多兑现 4 帧（每帧都重新按文字找一次落点），用户自己滚一下就作废。
+ */
+let pending: { tabId: string; mode: Mode; needle: string; ratio: number; applied: number } | null = null;
+
+/** 换档后补的那几帧 */
+const RESTORE_FRAMES = 4;
+
+/**
+ * 下一帧再落一次：**必须认得当初那张档**。
+ * rAF 排出去到执行之间用户可能已经切了标签，那时 `activeTab` 是别的文档，
+ * 拿旧 needle 去换算就是「落到上上次的位置」（review 抓的这条泄漏）。
+ */
+function scheduleSecondFrame(tabId: string, mode: Mode): void {
+  requestAnimationFrame(() => {
+    if (activeTab.value?.id !== tabId) {
+      pending = null;
+      return;
+    }
+    restoreScroll(mode);
+  });
+}
+
 function restoreScroll(mode: Mode) {
   const tab = activeTab.value;
   if (!tab) return;
-  const v = tab.scroll[mode];
-  if (!v) return;
+  const from = lastMode.get(tab.id);
+  const el = scrollerOf(mode);
+  let v = tab.scroll[mode];
+  if (pending && pending.tabId === tab.id && pending.mode === mode && el) {
+    // ① 换算还没兑现完：按**当前**几何与**当前**顶端那段字再落一次
+    const near = scrollTopFor(pending.ratio, el.scrollHeight, el.clientHeight);
+    v = applyAnchor(mode, pending.needle, near) ? el.scrollTop : near;
+    tab.scroll[mode] = v;
+    pending.applied++;
+    /*
+     * 「落点两次一样就收」在源码档不成立：CM **没滚到过的区域一直用估算行高**，
+     * 估算值稳定地错（本机 175% 缩放下每行差不到 1px，攒到第 60 行就是 8 段的偏差），
+     * 稳定 ≠ 测准了。所以固定补满几帧：每帧重新按文字找一次落点，
+     * CM 测准之后自然落到真正的那一行；重复应用同一个值不花钱。
+     */
+    if (pending.applied >= RESTORE_FRAMES) pending = null;
+    else scheduleSecondFrame(tab.id, mode);
+  } else if (from && from !== mode && el) {
+    // ② 换档那一刻：新事务开始，上一笔没兑现完的一律作废
+    pending = null;
+    const g = geom.get(gk(tab.id, from));
+    const needle = anchorByMode.get(gk(tab.id, from)) ?? "";
+    const r = g ? ratioOf(tab.scroll[from], g.content, g.view) : 0;
+    const near = scrollTopFor(r, el.scrollHeight, el.clientHeight);
+    if (applyAnchor(mode, needle, near)) {
+      pending = { tabId: tab.id, mode, needle, ratio: r, applied: 1 };
+      v = el.scrollTop;
+      // 目标档的 DOM 这会儿常常还没测准（CM 首帧按估算行高建 heightmap、
+      // 阅读档 hydrate 完图还会撑高），所以补第二帧 —— 放在这里而不是 `if (!v)` 之后，
+      // 否则「锚点落在文档第一块（v=0）」那条早退路径会把第二帧吞掉
+      scheduleSecondFrame(tab.id, mode);
+    } else {
+      // 没有可用锚点（比如顶端那块是图片）：比例一次算完，不再补第二帧
+      v = near;
+    }
+    tab.scroll[mode] = v;
+  }
+  // 目标档还没挂上时**不推进** lastMode，等异步组件挂载后补的那一次回位再来
+  if (el) lastMode.set(tab.id, mode);
+  if (!v) {
+    /*
+     * 落点是 0，但容器**不停在 0** 时也要真的落下去。
+     * 阅读/编辑/源码那三个容器在标签之间是**复用**的：甲篇滚到 700，再打开乙篇（乙自己记的是 0），
+     * 原来「没值就 return」会让视口停在 700 —— 用户看到的就是「新打开的文档一上来就在半空中」。
+     * （140 那条「换档当帧切标签」的时序用例抓到的就是它。）
+     * 已经贴在顶上时什么都不做：那就不必开 350ms 的回位窗口，免得把用户紧接着的那一下滚动吞掉。
+     */
+    const el2 = scrollerOf(mode);
+    if (el2 && el2.scrollTop > 0) {
+      beginRestoring();
+      if (mode === "read") readScroller.value!.scrollTop = 0;
+      if (mode === "source") source.value?.setScrollTop(0);
+      if (mode === "edit") edit.value?.setScrollTop(0);
+    }
+    noteGeom(mode);
+    return;
+  }
   beginRestoring();
   if (mode === "read" && readScroller.value) readScroller.value.scrollTop = v;
-  if (mode === "source") {
-    source.value?.setScrollTop(v);
-    // CM 首帧的 heightmap 是按**估算行高**建的，测准之后会把滚动位置重新换算一遍
-    // （实测：设 150 结果停在 266）。和阅读模式「hydrate 撑高后再回位一次」同一类问题，
-    // 所以这里也补一帧：等到真实测量完成再钉一次位置。
-    requestAnimationFrame(() => source.value?.setScrollTop(v));
-  }
-  // 119：编辑模式也有一份滚动（`scroll.edit` 这一槽 M1 009 就留好了，一直没接线）
+  if (mode === "source") source.value?.setScrollTop(v);
   if (mode === "edit") edit.value?.setScrollTop(v);
+  noteGeom(mode);
 }
 
 /**
@@ -153,6 +274,9 @@ function attachSourceScroll() {
     () => {
       const tab = activeTab.value;
       if (tab) tab.scroll.source = dom.scrollTop;
+      noteGeom("source");
+      // 用户自己滚了（不在回位窗口里）→ 那次跨档换算就作废
+      if (!restoring) pending = null;
     },
     { passive: true }
   );
@@ -168,6 +292,8 @@ function attachEditScroll() {
     () => {
       const tab = activeTab.value;
       if (tab) tab.scroll.edit = dom.scrollTop;
+      noteGeom("edit");
+      if (!restoring) pending = null;
     },
     { passive: true }
   );
@@ -271,13 +397,6 @@ watch(
   { immediate: true }
 );
 
-watch(
-  () => props.host,
-  (h) => {
-    if (h) void runSelfCheck(h);
-  }
-);
-
 // SourceView / EditView 是异步组件，首帧可能还没实例化；等 ref 到位再绑滚动与回位
 watch(source, (el) => {
   if (!el) return;
@@ -291,9 +410,34 @@ watch(edit, (el) => {
   restoreScroll("edit");
 });
 
+/**
+ * 换标签就是一次新的阅读，不是换档 —— 上一张档没兑现完的那笔换算必须作废，
+ * 否则它会在这一张档上按**别的文档的**文字去找落点（`scheduleSecondFrame` 里那条
+ * tabId 守卫挡的是回调，这里挡的是「下一次 restoreScroll 撞上旧 pending」）。
+ */
+watch(
+  () => activeTab.value?.id,
+  () => {
+    pending = null;
+    // 关掉的标签不该继续占着几何与锚点：按现存的标签集合裁一次
+    const 活着 = new Set(tabs.list.map((t) => t.id));
+    for (const key of [...geom.keys(), ...anchorByMode.keys()]) {
+      if (!活着.has(key.split("|")[0])) {
+        geom.delete(key);
+        anchorByMode.delete(key);
+      }
+    }
+  }
+);
+
 function onReadScroll() {
   const tab = activeTab.value;
-  if (tab && readScroller.value && !restoring) tab.scroll.read = readScroller.value.scrollTop;
+  if (tab && readScroller.value && !restoring) {
+    tab.scroll.read = readScroller.value.scrollTop;
+    pending = null; // 同上：人已经自己滚了，就别再按旧比例回拉
+  }
+  // 几何要**无条件**记：换档前最后一帧往往还在回位窗口里，跳过就拿着旧高度去换算位置
+  noteGeom("read");
   syncActiveHeading();
 }
 
@@ -401,23 +545,6 @@ function onWheel(e: WheelEvent) {
       </div>
       <p class="placeholder">{{ t("empty.hint") }}</p>
 
-      <ul class="pane__checks">
-        <li :class="['check', 'check--' + state]">
-          <span class="check__label">{{ t("empty.hostSelfCheck") }}</span>
-          <span class="check__state">
-            {{
-              state === "pass"
-                ? t("check.pass")
-                : state === "fail"
-                  ? t("check.fail")
-                  : state === "running"
-                    ? t("check.running")
-                    : t("check.waiting")
-            }}
-          </span>
-          <span v-if="detail" class="check__detail">{{ detail }}</span>
-        </li>
-      </ul>
     </div>
 
     <!-- 阅读模式 -->
@@ -555,40 +682,4 @@ function onWheel(e: WheelEvent) {
   background: var(--hp-surface);
 }
 
-.pane__checks {
-  list-style: none;
-  margin: 16px 0 0;
-  padding: 0;
-  width: min(420px, 90%);
-}
-
-.check {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  gap: 8px;
-  align-items: baseline;
-  padding: 8px 10px;
-  border: 1px solid var(--hp-border);
-  border-radius: 6px;
-  background: var(--hp-surface);
-  font-size: 13px;
-}
-
-.check__state {
-  color: var(--hp-text-weak);
-}
-
-.check--pass .check__state {
-  color: #2e7d46;
-}
-
-.check--fail .check__state {
-  color: var(--hp-error);
-}
-
-.check__detail {
-  color: var(--hp-text-weak);
-  text-align: right;
-  overflow-wrap: anywhere;
-}
 </style>

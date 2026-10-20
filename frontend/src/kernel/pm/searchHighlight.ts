@@ -90,9 +90,10 @@ export function searchHighlightPlugin(): Plugin {
   });
 }
 
-function paint(view: EditorView, matches: Match[], current: number, posAt: (o: number) => number): void {
+function paint(view: EditorView, matches: Match[], current: number, posAt: (o: number) => number, reveal: boolean): void {
   view.dispatch(view.state.tr.setMeta("hpSearch", { matches, current, posAt }));
-  if (current >= 0) {
+  // 打字途中只画不高亮跳转：滚动与选区留给 Enter / ↑↓（见 SearchAdapter.apply 的注释）
+  if (reveal && current >= 0) {
     view.dom.querySelector<HTMLElement>("[data-hp-current]")?.scrollIntoView({ block: "center" });
   }
 }
@@ -125,13 +126,15 @@ export function makePmAdapter(view: EditorView): SearchAdapter {
   return {
     text: () => docTextOf(view.state.doc).text,
     canReplace: true,
-    apply(matches, current) {
+    apply(matches, current, reveal) {
       last = matches;
       lastCurrent = current;
       const { posAt } = docTextOf(view.state.doc);
-      paint(view, matches, current, posAt);
-      // 当前项同时是**选区**：继续打字、复制、撤销都以选区为准
-      if (current >= 0 && matches[current]) {
+      paint(view, matches, current, posAt, reveal);
+      // 当前项同时是**选区**：继续打字、复制、撤销都以选区为准。
+      // 但**只在 reveal 时落** —— 查找框每敲一个字就 dispatch 一次选区事务，
+      // PM 会把 DOM 选区同步进正文，输入法组合当场被打断（140：中文打不出来、第二个字母没反应）
+      if (reveal && current >= 0 && matches[current]) {
         const m = matches[current];
         view.dispatch(
           view.state.tr.setSelection(TextSelection.create(view.state.doc, posAt(m.from), posAt(m.to)))

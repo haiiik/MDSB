@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { t as msg } from "../i18n";
-import { nextTick, reactive, ref, watch } from "vue";
+import { t as msg, tf } from "../i18n";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import ThemeToggle from "./ThemeToggle.vue";
 import {
   activate,
@@ -38,21 +38,70 @@ const menu = reactive({
 const drag = reactive({ from: -1, over: -1 });
 
 /**
- * 134：标签多到溢出时，**当前标签要自己滚进可视区**。
- * 之前只有 `overflow-x: auto`，靠人自己拖滚动条 —— 从资源管理器双击打开一篇排在后面的文档，
- * 窗口跳到前台了、标签也在最右边缘外，看上去就像"没打开"。
- * `inline: "nearest"` 是关键：已经在可视区时一步都不滚，不做居中跳动。
+ * 140（她：「页签区域不再上下左右滚动，去掉滚动条，标签过多时收纳，点图标展开浮窗选择」）。
+ *
+ * 做法是**算容量**而不是靠 CSS 裁：
+ * - 每颗标签的宽度在 `TAB_MIN`～`TAB_MAX` 之间由 flex 平分（控件尺寸恒定，不随字数换行）；
+ * - `capacity` = 标签区可用宽度 ÷ 最小宽度，装不下的收进「+N」那颗；
+ * - **当前标签永远在可视窗口里**（窗口以它为中心滑），所以 134 那条"从资源管理器
+ *   双击排在后面的文档，看上去像没打开"的修法没有丢，只是从滚动变成收纳；
+ * - 右侧齿轮与主题开关在标签区外面，位置与标签数量无关（她这条点名要固定）。
  */
-const bar = ref<HTMLElement | null>(null);
-watch(
-  () => tabs.activeId,
-  async () => {
-    await nextTick();
-    const el = bar.value?.querySelector<HTMLElement>(".tab.is-active");
-    el?.scrollIntoView({ inline: "nearest", block: "nearest" });
-  },
-  { immediate: true },
-);
+const TAB_MIN = 96;
+const TAB_MAX = 200;
+const TAB_GAP = 2;
+/**
+ * 「+」「打开文件」两颗固定占位，加上**收纳那颗**的宽度 —— 收纳那颗按常驻算：
+ * 它出现与否取决于容量，容量又取决于它占不占地方，来回解会抖；
+ * 宁可少排一颗标签，也不要出现「算满了却被裁掉 2px」这种（e2e 量出来过）。
+ */
+/** 三颗固定键各自的宽度：「+」「打开文件」是 26，「+N」那颗给到 34（两位数也放得下） */
+const BTN_W = 26;
+const MORE_W = 34;
+const TAB_FIXED = 2 * (BTN_W + TAB_GAP) + (MORE_W + TAB_GAP);
+
+const strip = ref<HTMLElement | null>(null);
+const stripW = ref(0);
+
+function measure(): void {
+  if (strip.value) stripW.value = strip.value.clientWidth;
+}
+
+let ro: ResizeObserver | null = null;
+onMounted(() => {
+  measure();
+  // 窗口拖宽拖窄、侧栏收起展开都会走这里；没有 ResizeObserver 的旧运行时退回窗口 resize
+  if (typeof ResizeObserver !== "undefined") {
+    ro = new ResizeObserver(measure);
+    if (strip.value) ro.observe(strip.value);
+  }
+  window.addEventListener("resize", measure);
+});
+onBeforeUnmount(() => {
+  ro?.disconnect();
+  window.removeEventListener("resize", measure);
+});
+
+const capacity = computed(() => {
+  const avail = Math.max(0, stripW.value - TAB_FIXED - (tabs.list.length ? TAB_GAP * 2 : 0));
+  return Math.max(1, Math.floor((avail + TAB_GAP) / (TAB_MIN + TAB_GAP)));
+});
+/** 可视窗口：以当前标签为中心，保证它一定在里头 */
+const window0 = computed(() => {
+  const n = capacity.value;
+  if (tabs.list.length <= n) return 0;
+  const idx = Math.max(0, tabs.list.findIndex((t) => t.id === tabs.activeId));
+  const half = Math.floor((n - 1) / 2);
+  return Math.min(Math.max(0, idx - half), tabs.list.length - n);
+});
+const shown = computed(() => tabs.list.slice(window0.value, window0.value + capacity.value));
+const hidden = computed(() => tabs.list.filter((t) => !shown.value.includes(t)));
+
+const picker = ref(false);
+function pick(id: string): void {
+  activate(id);
+  picker.value = false;
+}
 
 function onMiddle(e: MouseEvent, id: string) {
   if (e.button === 1) {
@@ -109,20 +158,21 @@ function onDrop(to: number) {
 </script>
 
 <template>
-  <div ref="bar" class="tabbar" data-testid="tabbar">
+  <div class="tabbar" data-testid="tabbar">
+   <div ref="strip" class="tabbar__strip" data-testid="tabbar-strip">
     <div
-      v-for="(t, i) in tabs.list"
+      v-for="(t, i) in shown"
       :key="t.id"
       class="tab"
-      :class="{ 'is-active': t.id === tabs.activeId, 'is-over': drag.over === i }"
+      :class="{ 'is-active': t.id === tabs.activeId, 'is-over': drag.over === window0 + i }"
       :draggable="true"
       @click="activate(t.id)"
       @mousedown.middle="onMiddle($event, t.id)"
       @dblclick="emit('close', t.id)"
       @contextmenu="onContext($event, t.id)"
-      @dragstart="drag.from = i"
-      @dragover.prevent="drag.over = i"
-      @drop="onDrop(i)"
+      @dragstart="drag.from = window0 + i"
+      @dragover.prevent="drag.over = window0 + i"
+      @drop="onDrop(window0 + i)"
       @dragend="drag.from = -1; drag.over = -1"
     >
       <span v-if="isDirty(t)" class="tab__dirty" :title="msg('tab.dirty')" data-testid="tab-dirty">●</span>
@@ -131,6 +181,17 @@ function onDrop(to: number) {
         ×
       </button>
     </div>
+    <!-- 140：装不下的收进这颗，点开创浮窗挑（页签区不出现滚动条） -->
+    <button
+      v-if="hidden.length"
+      class="tabbar__more"
+      :class="{ 'is-on': picker }"
+      :title="tf('tab.moreHint', { n: hidden.length })"
+      :aria-label="tf('tab.moreHint', { n: hidden.length })"
+      :aria-expanded="picker ? 'true' : 'false'"
+      data-testid="tab-more"
+      @click="picker = !picker"
+    >+{{ hidden.length }}</button>
     <!--
       127：这颗「+」**不再是打开文件**，按她的口径改成「新增标签」——
       点下去开一份未命名的空 Markdown，直接进编辑档、可以打字（`createUntitled`）。
@@ -169,7 +230,7 @@ function onDrop(to: number) {
         />
       </svg>
     </button>
-    <div class="tabbar__spacer" />
+   </div>
     <!--
       设置：标签栏右端的齿轮（124 从顶栏挪过来）。
       路径是**算出来的**（8 齿、齿根 r=5.5、齿顶 r=7.3、中心孔 r=2.3，16×16 viewBox），
@@ -193,6 +254,24 @@ function onDrop(to: number) {
     </button>
     <!-- 127：主题开关（从设置里挪出来，就在齿轮右手边；右缘与顶栏关闭按钮对齐） -->
     <ThemeToggle />
+  </div>
+
+  <!-- 收纳浮窗：列**全部**标签（只列收起的那几颗的话，用户看不出自己在哪里） -->
+  <div v-if="picker" class="menu-mask" data-testid="tab-picker-mask" @click="picker = false">
+    <ul class="menu tabpicker" data-testid="tab-picker" @click.stop>
+      <li class="tabpicker__head">{{ msg("tab.pickerTitle") }}</li>
+      <li
+        v-for="t in tabs.list"
+        :key="t.id"
+        class="tabpicker__item"
+        :class="{ 'is-active': t.id === tabs.activeId }"
+        :data-testid="'tab-pick-' + t.id"
+        @click="pick(t.id)"
+      >
+        <span v-if="isDirty(t)" class="tabpicker__dot">●</span>
+        <span class="tabpicker__name" :title="t.path ?? t.name">{{ t.name }}</span>
+      </li>
+    </ul>
   </div>
 
   <div v-if="menu.open" class="menu-mask" @click="closeMenu" @contextmenu.prevent="closeMenu">
@@ -224,14 +303,95 @@ function onDrop(to: number) {
   padding: 3px 10px 0 18px;
   background: var(--hp-surface);
   border-bottom: 1px solid var(--hp-border);
-  overflow-x: auto;
-  scrollbar-width: thin;
+}
+
+/*
+ * 140：标签区自己不再滚动（原来 `overflow-x: auto; scrollbar-width: thin`）——
+ * 装不下就收纳进「+N」，横向滚动条与纵向滚动条都不该出现在这一栏。
+ */
+.tabbar__strip {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tabbar__more {
+  align-self: center;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--hp-text-weak);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tabbar__more:hover,
+.tabbar__more.is-on {
+  border-color: var(--hp-border);
+  background: var(--hp-hover);
+  color: var(--hp-accent);
+}
+
+.tabpicker {
+  position: fixed;
+  top: 36px;
+  left: 18px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  min-width: 240px;
+}
+
+.tabpicker__head {
+  padding: 4px 10px;
+  color: var(--hp-text-weak);
+  font-size: 11px;
+  cursor: default;
+}
+
+.tabpicker__head:hover {
+  background: none;
+}
+
+.tabpicker__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tabpicker__item.is-active {
+  color: var(--hp-accent);
+  background: var(--hp-selected);
+}
+
+.tabpicker__dot {
+  color: var(--hp-accent);
+  font-size: 9px;
+}
+
+.tabpicker__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab {
   display: flex;
   align-items: center;
   gap: 6px;
+  /* 140：容量按 TAB_MIN 算，所以这里给同样的下限；宽裕时由 flex 平分到上限 */
+  flex: 1 1 0;
+  min-width: 96px;
   max-width: 200px;
   padding: 0 8px 0 12px;
   border: 1px solid transparent;
@@ -259,6 +419,14 @@ function onDrop(to: number) {
 }
 
 .tab__name {
+  /*
+   * 140：标签等宽平分之后，名字必须**吃掉中间那段空**，× 才会落在右缘。
+   * 不这么做的话 × 紧跟在名字后面，而标签的几何中心正好压在 × 上 ——
+   * 点标签变成关标签（是 e2e「切标签不丢源码模式的编辑内容」先红出来的，
+   * 命中测试打在 `tab__close` 上）。
+   */
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -280,10 +448,6 @@ function onDrop(to: number) {
   color: var(--hp-text);
 }
 
-.tabbar__spacer {
-  flex: 1;
-  min-width: 8px;
-}
 
 .tabbar__new {
   /*

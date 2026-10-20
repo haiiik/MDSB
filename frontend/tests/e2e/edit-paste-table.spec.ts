@@ -20,6 +20,28 @@ const DOC = "# 表\n\n正文段落。\n\n| 模式 | 快捷键 |\n| :--- | ---: |
  */
 let path = "";
 
+/**
+ * 115 的两条「光标在表格里粘贴」都靠 `td.click()` 拿选区，但**点击不等于选区已经落进那一格**：
+ * 粘贴如果发生在选区还在文档开头的时候，粘出来的表会排到文首、还把 H1 的字吃掉
+ * （这条假红在真跑里稳定复现，症状长得像「补齐逻辑写错了」，其实是粘贴的时机）。
+ * 所以粘之前先**确认选区真的在表格单元格里** —— 判据要测自己。
+ */
+const 光标在格子里 = (page: Page) =>
+  page.evaluate(() => {
+    const s = window.getSelection();
+    const n = s?.anchorNode;
+    if (!n) return false;
+    const el = n.nodeType === 1 ? (n as Element) : (n as Element).parentElement;
+    return !!el && !!el.closest(".ProseMirror td, .ProseMirror th");
+  });
+
+const 把光标放进第一格 = async (page: Page) => {
+  await page.locator(".ProseMirror td").first().click();
+  await expect
+    .poll(() => 光标在格子里(page), { timeout: 4000, message: "选区没落进表格单元格，粘贴会粘到文首" })
+    .toBe(true);
+};
+
 async function seedAndOpen(page: Page, doc = DOC) {
   path = "/demo/粘贴表格-" + test.info().title.replace(/[^\w一-龥]+/g, "-") + ".md";
   await freshSession(page);
@@ -117,7 +139,7 @@ test("Excel 的 HTML（对齐只写在 style 里）粘贴后对齐标记正确",
 
 test("光标在表格里粘贴表格 → 并入这张表，不出现嵌套表", async ({ page }) => {
   await seedAndOpen(page);
-  await page.locator(".ProseMirror td").first().click(); // 「阅读」那一行
+  await 把光标放进第一格(page); // 「阅读」那一行
   await paste(page, { html: "<table><tr><td>粘贴</td><td>进来</td></tr></table>" });
 
   await expect(page.locator(".ProseMirror table")).toHaveCount(1);
@@ -135,7 +157,7 @@ test("光标在表格里粘贴表格 → 并入这张表，不出现嵌套表", 
 
 test("列数不一致的表格并入时两边补齐，谁的内容都不丢", async ({ page }) => {
   await seedAndOpen(page);
-  await page.locator(".ProseMirror td").first().click();
+  await 把光标放进第一格(page);
   await paste(page, { html: "<table><tr><td>甲</td><td>乙</td><td>丙</td></tr></table>" });
   await pressSave(page);
 

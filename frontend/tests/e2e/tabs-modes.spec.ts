@@ -181,21 +181,27 @@ test("按钮 title 只说去哪档，不写快捷键（D18：模式切换不占�
 
 test("标签栏右端是齿轮 + 主题开关；「+」紧跟最后一个标签", async ({ page }) => {
   /*
-   * DOM 顺序（127 之后）：
-   * ... .tab → tabbar__new（新增标签）→ tabbar__open（打开文件）→ spacer → tabbar__settings → themepill
-   * 这条断言就是这条线的守门人：谁再往右端塞按钮、或者把「+」钉回栏右端，这里会先红。
+   * DOM 顺序（140 之后）：
+   *   .tabbar → [ .tabbar__strip（.tab… →（收纳那颗）→ tabbar__new → tabbar__open）,
+   *               tabbar__settings, themepill ]
+   * 140 之前是「标签 → + → 打开 → spacer → 齿轮 → 主题」全平铺在一层，靠 spacer 把功能键推到右端；
+   * 现在标签区自己占满剩余宽度（flex:1），spacer 不再需要 ——
+   * **齿轮与主题开关在标签区外面**，这正是她要的「设置主题等按钮固定位置」。
+   * 这条断言仍是守门人：谁再往右端塞按钮、或者把「+」钉回栏右端，这里会先红。
    */
-  const order = await page.evaluate(() => {
-    const bar = document.querySelector('[data-testid="tabbar"]')!;
-    return [...bar.children].map((el) => el.className);
-  });
-  expect(order[order.length - 1]).toContain("themepill"); // 主题开关是这一栏最右的一个
-  expect(order[order.length - 2]).toContain("tabbar__settings"); // 齿轮在它左边
-  expect(order[order.length - 3]).toContain("tabbar__spacer");
-  expect(order[order.length - 4]).toContain("tabbar__open");
-  expect(order[order.length - 5]).toContain("tabbar__new");
-  expect(order[order.length - 6]).toContain("tab"); // 最后一个标签就在「+」左边
-  expect(order.join(" ")).not.toContain("tabbar__mode"); // 循环按钮真的不在了
+  const 外层 = await page.evaluate(() =>
+    [...document.querySelector('[data-testid="tabbar"]')!.children].map((el) => el.className)
+  );
+  expect(外层[外层.length - 1]).toContain("themepill"); // 主题开关是这一栏最右的一个
+  expect(外层[外层.length - 2]).toContain("tabbar__settings"); // 齿轮在它左边
+  expect(外层[0]).toContain("tabbar__strip"); // 再往左就是标签区本身
+  const 区内 = await page.evaluate(() =>
+    [...document.querySelector('[data-testid="tabbar-strip"]')!.children].map((el) => el.className)
+  );
+  expect(区内[区内.length - 1]).toContain("tabbar__open"); // 「+」右边是打开文件
+  expect(区内[区内.length - 2]).toContain("tabbar__new");
+  expect(区内[区内.length - 3]).toContain("tab"); // 最后一个标签就在「+」左边
+  expect(外层.join(" ")).not.toContain("tabbar__mode"); // 循环按钮真的不在了
 
   // 一个标签时：+ 贴着标签，而不是贴在栏的右端
   const box = async (sel: string) => page.getByTestId(sel).boundingBox();
@@ -223,37 +229,62 @@ test("没有活动标签时底栏整组模式按钮不出现（不能凭空切�
 
 
 /**
- * 134：标签多到溢出时，当前标签必须自己滚进可视区。
- * 之前只有 `overflow-x: auto`：从资源管理器双击打开一篇排在后面的文档，
- * 窗口跳到前台、标签也在最右边缘之外，看上去就像"没打开"。
+ * 140（她：「页签区域不再上下左右滚动，去掉滚动条，标签过多时收纳，通过点击图标展开浮窗选择；
+ * 设置主题等按钮固定位置」）。
+ *
+ * 134 那条"当前标签滚进可视区"的诉求没有丢，只是换了实现：**当前标签一定在可视窗口里**，
+ * 装不下的收进「+N」，浮窗里能挑到任意一篇。
  */
-test("标签溢出时：激活最右那一篇，它会滚进可视区", async ({ page }) => {
+test("标签溢出时：收纳成 +N、浮窗可选、页签区不出滚动条、齿轮位置不动", async ({ page }) => {
   await freshSession(page);
   await gotoApp(page);
-  for (let i = 1; i <= 12; i++) {
+  await page.getByTestId("tab-new").click();
+  await page.waitForTimeout(300);
+  const 齿轮 = await page.getByTestId("open-settings").boundingBox();
+  const 主题 = await page.getByTestId("theme-switch").boundingBox();
+  expect(齿轮 && 主题).toBeTruthy();
+
+  const seed = async (i: number) => {
     const p = "/demo/长名字标签-" + i + ".md";
     await page.evaluate(
       ([path, text]) => {
         (window as unknown as { __hpMockSeedFile: (a: string, b: string) => void }).__hpMockSeedFile(path, text);
         (window as unknown as { __hpMockPickPath?: string }).__hpMockPickPath = path;
       },
-      [p, "# 标签 " + i + "\n\n正文。\n"]
+      [p, ["# 标签 " + i, "", "正文。", ""].join(String.fromCharCode(10))]
     );
     await page.getByTestId("tab-open").click();
     await page.waitForTimeout(120);
-  }
-  const tabs = page.locator(".tab");
-  expect(await tabs.count()).toBe(12);
+  };
+  for (let i = 1; i <= 12; i++) await seed(i);
 
-  const bar = await page.getByTestId("tabbar").boundingBox();
-  const last = tabs.last();
-  await last.click();
-  await page.waitForTimeout(400);
+  const strip = page.getByTestId("tabbar-strip");
+  // ① 不出滚动条：内容宽度不超过可视宽度（140 之前这里靠 overflow-x 滚）
+  expect(await strip.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  // ② 确实收纳了：可见标签少于总数，且那颗 +N 的数字对得上
+  //    （总数 = 开头为量齿轮基线新建的那 1 张未命名 + 后面打开的 12 篇）
+  const 总数 = 1 + 12;
+  const 可见 = await page.locator(".tab").count();
+  expect(可见).toBeLessThan(总数);
+  const chip = page.getByTestId("tab-more");
+  await expect(chip).toHaveText("+" + (总数 - 可见));
+  // ③ 当前标签（最后打开的第 12 篇）一定在可视窗口里 —— 134 那条诉求的新落点
+  await expect(page.locator(".tab").last()).toContainText("长名字标签-12");
+  // ④ 齿轮与主题开关的位置与标签数量无关（她点名要固定）
+  const 齿轮后 = await page.getByTestId("open-settings").boundingBox();
+  const 主题后 = await page.getByTestId("theme-switch").boundingBox();
+  expect(Math.abs(齿轮后!.x - 齿轮!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(主题后!.x - 主题!.x)).toBeLessThanOrEqual(1);
 
-  const lb = await last.boundingBox();
-  expect(lb).not.toBeNull();
-  // 右缘要落在可视区内（留 1px 容差），否则用户看不到当前标签
-  expect(lb!.x + lb!.width).toBeLessThanOrEqual(bar!.x + bar!.width + 1);
-  // 而且它是当前标签（高亮在滚过去的那一篇上，不是滚到别处）
-  await expect(last).toHaveClass(/is-active/);
+  // ⑤ 浮窗列出全部标签，点第 12 篇能选到，选完浮窗收起
+  //    （按名字精确挑，不按 nth —— 列表里"长名字标签-1"是"长名字标签-10"的前缀，nth 押的是顺序不是内容）
+  await chip.click();
+  await expect(page.getByTestId("tab-picker").locator(".tabpicker__item")).toHaveCount(总数);
+  await page
+    .locator(".tabpicker__item")
+    .filter({ has: page.locator(".tabpicker__name", { hasText: /^长名字标签-1\.md$/ }) })
+    .click();
+  await expect(page.getByTestId("tab-picker")).toHaveCount(0);
+  // 选中的那颗成了当前标签，而且**在可视窗口里**（收纳窗口以当前标签为中心）
+  await expect(page.locator(".tab.is-active")).toContainText("长名字标签-1.md");
 });

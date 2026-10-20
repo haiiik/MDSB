@@ -47,21 +47,45 @@ test("悬停可移除单条；清空只清列表不动标签", async ({ page }) 
   await expect(page.getByTestId("tabbar").locator(".tab")).toHaveCount(2);
 });
 
-test("置顶项排最前并带星标", async ({ page }) => {
+/**
+ * 140 她报的那条：「星星图标两种状态的位置不一样」。
+ *
+ * 根因是 127 那轮把行内星标换成独立的 `.recent__flag` 塞进名字后面 —— 那是**会占宽度的元素**，
+ * 一置顶整行内容就左移，操作列那颗星星跟着挪。
+ * 现在改成：行内不再插旗，操作列那颗按钮自己「未 hover 也常驻」表示已置顶，
+ * 所以两态是同一个盒子、同一个位置。判据直接量两态的 x 中心，而不是量"有没有那颗星"。
+ */
+test("置顶项排最前，且星星两态位置一模一样（140）", async ({ page }) => {
   await pickAndOpen(page, DEMO);
   await pickAndOpen(page, OTHER);
 
-  await page.locator(".recent__item").nth(1).hover();
-  await page.locator(".recent__item").nth(1).locator(".recent__ops button").nth(0).click();
+  const 行 = page.locator(".recent__item");
+  const 星 = (n: number) => 行.nth(n).locator('[data-testid="recent-pin"]');
+  /** 同一行里星星的水平中心 + 名字列宽度：这两个数只要一动，就是"置顶把行推歪了" */
+  const 量 = (n: number) =>
+    星(n).evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const name = el.closest(".recent__item")!.querySelector(".recent__name")!.getBoundingClientRect();
+      return { x: r.left + r.width / 2, 名字宽: name.width, 可见: getComputedStyle(el).opacity !== "0" };
+    });
 
-  await expect(page.locator(".recent__item").first()).toContainText("欢迎.md");
-  // 127：行内那枚星标从 `.recent__pin`（嵌在名字里）换成独立的 `.recent__flag`，
-  // 同时操作列那颗置顶按钮进入"已置顶"态（`.is-on`）—— 两处都要跟着，不然只测到一半
-  await expect(page.locator(".recent__item").first().locator(".recent__flag")).toHaveCount(1);
-  await page.locator(".recent__item").first().hover();
-  await expect(
-    page.locator(".recent__item").first().locator(".recent__ops button").nth(0)
-  ).toHaveClass(/is-on/);
+  // 未置顶那一行（第二行）先量一次
+  const 未置顶 = await 量(1);
+  expect(未置顶.可见, "未置顶且不悬停时不该露出按钮").toBe(false);
+
+  await 行.nth(1).hover();
+  await 星(1).click();
+  await expect(行.first()).toContainText("欢迎.md");
+
+  const 置顶后 = await 量(0);
+  expect(置顶后.可见, "已置顶那颗要常驻（不靠 hover 才看得见）").toBe(true);
+  // 核心判据：**星星还在同一列、名字列没被挤窄**（原来一置顶就在名字后面插一枚旗，整行左移）
+  expect(Math.abs(置顶后.x - 未置顶.x), "置顶前后星星的横向中心不许移动").toBeLessThanOrEqual(1);
+  expect(Math.abs(置顶后.名字宽 - 未置顶.名字宽), "名字列宽度也不许跟着变").toBeLessThanOrEqual(1);
+
+  // 行内不再插第二枚旗（两态位置一错，一半原因是它占宽度）；不可用那枚文字标记不在此列
+  await expect(行.first().locator(".recent__flag:not(.is-bad)")).toHaveCount(0);
+  await expect(星(0)).toHaveClass(/is-on/);
 });
 
 test("文件被删除后条目仍在但标为不可用，点击给提示", async ({ page }) => {

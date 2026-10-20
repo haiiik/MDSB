@@ -277,7 +277,6 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
             @mouseleave="stopMarquee"
           >
             <span class="recent__name"><span class="recent__text">{{ baseName(e.path) }}</span></span>
-            <span v-if="e.pinned" class="recent__flag" :title="t('sidebar.pinned')">★</span>
             <span v-if="isUnavailable(e.path)" class="recent__flag is-bad" :title="t('sidebar.unavailable')">{{ t('sidebar.unavailableShort') }}</span>
           </button>
           <span class="recent__ops">
@@ -288,7 +287,17 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
               data-testid="recent-pin"
               @click.stop="togglePin(e.path)"
             >
-              ★
+              <!-- 画的五角星（140）：原来两态都靠字符 ★，置顶时旁边还多插一枚星标，
+                   行宽一变星星就跟着挪 —— 换成同一盒子里的描边/实心两态，位置永远不动 -->
+              <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                <path
+                  d="M8 1.6l1.9 4.1 4.5.5-3.3 3 .9 4.4L8 11.4l-4 2.2.9-4.4-3.3-3 4.5-.5z"
+                  :fill="e.pinned ? 'currentColor' : 'none'"
+                  :stroke="e.pinned ? 'none' : 'currentColor'"
+                  stroke-width="1.3"
+                  stroke-linejoin="round"
+                />
+              </svg>
             </button>
             <button
               :title="t('sidebar.remove')"
@@ -576,12 +585,18 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
   gap: 2px;
   height: 28px;
   padding-right: 4px;
+}
+
+/* 140：淡出从容器挪到**每颗按钮**上 —— 容器淡出时"已置顶"那颗也没法常驻，
+   只能靠行内再插一枚星标，而那枚星标正是把整行推歪的元凶 */
+.recent__ops button {
   opacity: 0;
   transition: opacity 120ms ease;
 }
 
-.recent__item:hover .recent__ops,
-.recent__ops:focus-within {
+.recent__item:hover .recent__ops button,
+.recent__ops button:focus-visible,
+.recent__ops button.is-on {
   opacity: 1;
 }
 

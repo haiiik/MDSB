@@ -23,8 +23,15 @@ import {
 export type SearchAdapter = {
   /** 当前模式下被搜索的纯文本 */
   text(): string;
-  /** 画高亮并把当前项滚进视野；matches 为空时清掉所有高亮 */
-  apply(matches: Match[], current: number): void;
+  /**
+   * 画高亮；`reveal` 为真时才把当前项**滚进视野并落成选区**。
+   *
+   * 这个开关是 140 为输入法加的：查找框每敲一个字都重算，
+   * 而「落选区」会把 DOM 选区从输入框抢进正文 —— Chromium 在组合期被抢选区，
+   * 拼音串当场作废（她的报告：输入一个字符就断、中文打不出来）。
+   * 所以**打字时只画高亮**，按 Enter / ↑↓ / 点下一个时才跳转。
+   */
+  apply(matches: Match[], current: number, reveal: boolean): void;
   /** 能不能替换（阅读模式只读 → false） */
   canReplace: boolean;
   /** 关闭查找条后把焦点还给正文（否则 Ctrl+Z 这类快捷键打在 body 上，用户以为撤销坏了） */
@@ -83,8 +90,12 @@ export function searchAdapter(): SearchAdapter | null {
   return adapterRef.value;
 }
 
-/** 按当前查询重算命中。适配器没注册（或模式刚切换还没挂载）时只是清空列表，不报错 */
-export function recomputeSearch(): void {
+/**
+ * 按当前查询重算命中。适配器没注册（或模式刚切换还没挂载）时只是清空列表，不报错。
+ *
+ * `reveal=false` 用于**打字途中**：只画高亮，不动选区、不滚动（见 `SearchAdapter.apply` 的注释）。
+ */
+export function recomputeSearch(reveal = true): void {
   const adapter = adapterRef.value;
   if (!adapter) {
     search.matches = [];
@@ -104,17 +115,25 @@ export function recomputeSearch(): void {
     }
   }
   search.current = search.matches.length ? 0 : -1;
-  adapter.apply(search.matches, search.current);
+  adapter.apply(search.matches, search.current, reveal);
 }
 
-export function setSearchQuery(q: string): void {
+/** 查找框打字走这条：`reveal=false`，输入法组合期不会被选区抢走 */
+export function setSearchQuery(q: string, reveal = false): void {
   search.query = q;
-  recomputeSearch();
+  recomputeSearch(reveal);
 }
 
-/** 文档变了才需要这个：查找条没开时不该为每次击键付一次全文扫描 */
+/**
+ * 文档变了才需要这个：查找条没开时不该为每次击键付一次全文扫描。
+ *
+ * 140 review：这条**不 reveal** —— 正文改动只是让高亮跟上，不是用户要求跳转；
+ * 开着查找条在正文里用输入法打字时，reveal 会往正文落选区，
+ * 那正是「查找框输入一个字符就断」的同一个根因，只是换了个入口。
+ * （`search.open` 时 `setSearchQuery` 走的那条已经是 reveal=false。）
+ */
 export function recomputeIfOpen(): void {
-  if (search.open) recomputeSearch();
+  if (search.open) recomputeSearch(false);
 }
 
 export function setSearchOptions(patch: Partial<SearchOptions>): void {
@@ -126,7 +145,8 @@ export function gotoMatch(delta: 1 | -1): void {
   const adapter = adapterRef.value;
   if (!adapter || !search.matches.length) return;
   search.current = advance(search.matches.length, search.current, delta);
-  adapter.apply(search.matches, search.current);
+  // 点了「上一个 / 下一个」或按 Enter 才跳转：这条**要** reveal（把当前项滚进视野并落成选区）
+  adapter.apply(search.matches, search.current, true);
 }
 
 export function openSearch(withReplace = false): void {
@@ -148,7 +168,7 @@ export function closeSearch(): void {
   search.open = false;
   search.error = "";
   const adapter = adapterRef.value;
-  adapter?.apply([], -1); // Esc 关闭并清高亮（验收明写）
+  adapter?.apply([], -1, false); // Esc 关闭并清高亮（验收明写）
   adapter?.focus?.();
 }
 

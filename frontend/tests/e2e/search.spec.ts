@@ -240,3 +240,61 @@ test("阅读模式是只读档：不给替换入口（不是置灰，是不出�
   await expect(page.getByTestId("search-toggle-replace")).toHaveCount(0);
   await expect(page.getByTestId("replace-input")).toHaveCount(0);
 });
+
+/**
+ * 140：输入法组合期不能被打断（她的报告：查找框输入一个字符就断、中文打不出来）。
+ *
+ * 判据押在**外部可见行为**上，不读组件内部变量：
+ *  ① 组合期间（拼音还没上屏）**不重算** —— 计数停在旧值；上屏那一刻才更新；
+ *  ② 组合期间的 Enter（选候选词）**不许当成"跳到下一个"** —— 当前项不变；
+ *  ③ 组合期结束后焦点仍在输入框里，值就是上屏的那串字。
+ */
+for (const mode of ["read", "edit", "source"] as const) {
+  test(`${mode}：中文输入法组合期不打断、选词的 Enter 不当成跳转`, async ({ page }) => {
+    await seedAndOpen(page, mode);
+    await page.keyboard.press("Control+f");
+    const box = page.getByTestId("search-input");
+    await expect(box).toBeVisible();
+    await type(page, "指标");
+    const 计数 = await countOf(page);
+    expect(计数).toBe("1 / 5");
+
+    // ① 模拟一次完整的组合：start → 拼音 input（**这中间不许重算**）→ 上屏 → end
+    await box.evaluate((el) => {
+      const i = el as HTMLInputElement;
+      i.focus();
+      i.dispatchEvent(new CompositionEvent("compositionstart", { data: "" }));
+      i.value = "指";
+      i.dispatchEvent(new InputEvent("input", { data: "指", isComposing: true, inputType: "insertCompositionText", bubbles: true }));
+    });
+    // 拼音还没上屏：计数保持旧值（这条就是"每敲一下都去动正文"的那笔账）
+    await page.waitForTimeout(250);
+    await expect(page.getByTestId("search-count")).toHaveText(计数);
+    await box.evaluate((el) => {
+      const i = el as HTMLInputElement;
+      i.value = "末段";
+      i.dispatchEvent(new InputEvent("input", { data: "末段", isComposing: true, inputType: "insertCompositionText", bubbles: true }));
+      i.dispatchEvent(new CompositionEvent("compositionend", { data: "末段" }));
+    });
+    await expect(box).toHaveValue("末段");
+    // 上屏之后计数跟着换（"末段" 在这篇里命中 1 处）
+    await expect(page.getByTestId("search-count")).not.toHaveText(计数);
+    // ③ 焦点还在框里（没被正文抢走 = 组合没被打断的前提）
+    await expect(box).toBeFocused();
+
+    // ② 组合期间按 Enter（真实 IME 用它选词）不该推进当前项。
+    //    这里换一个**多命中**的词再试：只有一条命中时"跳"与"不跳"看起来一样，判据量不出东西
+    await type(page, "指标");
+    const 当前 = await countOf(page);
+    expect(当前).toBe("1 / 5");
+    await box.evaluate((el) => {
+      const i = el as HTMLInputElement;
+      i.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true }));
+    });
+    await page.waitForTimeout(250);
+    await expect(page.getByTestId("search-count")).toHaveText(当前);
+    // 而真的按 Enter（没在组合）就是要跳：这一步同时证明上一条不是"Enter 整个失灵"
+    await box.press("Enter");
+    await expect(page.getByTestId("search-count")).toHaveText("2 / 5");
+  });
+}

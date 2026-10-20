@@ -1,6 +1,6 @@
 <p align="center">
   <img src="docs/screenshots/logo.svg" width="88" alt="MDStar logo">
-  <h1 align="center">MDStar</h1>
+  <h1 align="center">MDStar Browser</h1>
   <p align="center"><b>Markdown Star Browser</b> —— Windows 桌面 Markdown 阅读器 / 编辑器</p>
 </p>
 
@@ -10,9 +10,11 @@
 
 ## 截图
 
-| 阅读模式 | 编辑模式 | Mermaid 渲染 | 代码块 |
-| --- | --- | --- | --- |
-| <img src="docs/screenshots/01-read.png" alt="01-read" width="260"> | <img src="docs/screenshots/02-edit.png" alt="02-edit" width="260"> | <img src="docs/screenshots/03-mermaid.png" alt="03-mermaid" width="260"> | <img src="docs/screenshots/04-code-block.png" alt="04-code-block" width="260"> |
+| 阅读模式 | 编辑模式 |
+| --- | --- |
+| <img src="docs/screenshots/01-read.png" alt="阅读模式" width="470"> | <img src="docs/screenshots/02-edit.png" alt="编辑模式" width="470"> |
+| **Mermaid 渲染** | **代码块** |
+| <img src="docs/screenshots/03-mermaid.png" alt="Mermaid 渲染" width="470"> | <img src="docs/screenshots/04-code-block.png" alt="代码块" width="470"> |
 
 **深浅两档主题**（点标签栏齿轮右侧那颗日/月开关）：
 
@@ -29,7 +31,10 @@
 - 图片本地路径解析、失效图给出路径与复制按钮
 - 大图双击进灯箱：滚轮缩放、拖拽平移、一键适应屏幕
 - 代码块折叠、行号、一键复制、语言标注
+- 数学公式（KaTeX）：行内 `$…$` 与块级 `$$…$$`，写坏的公式降级成「原文 + 错误标记」而不是整段消失
+- 脚注：`[^1]` 引用与文末定义，点引用跳到定义、点 ↩ 跳回，多处引用同一定义也对
 - 字数统计
+- 中文 / English 界面（设置里切换，安装时也能选）
 
 **编辑**
 
@@ -38,7 +43,9 @@
 - 表格结构操作：增删行列、移动、设表头
 - 撤销有粒度：打字自动合并，结构操作各算一步，「替换全部」一步退回
 - 三档模式来回切不丢状态：各自的滚动位置、选区、撤销栈都保留
-- 查找与替换，三档模式行为一致（计数与高亮始终对得上）
+- 查找与替换，三档模式行为一致（计数与高亮始终对得上），中文输入法在查找框里正常组合
+- 公式就地改：块级是「上面排版、下面改源码」，改完只动那一处，`$$` 骨架不被重排
+- 脚注定义块可就地编辑；`插入文档链接` 从当前文件所在目录挑一篇，落成相对路径
 
 **Mermaid**
 
@@ -80,7 +87,7 @@ Wails v3（Go）+ WebView2 · ProseMirror（自研 schema 与映射层）· Code
 - 已有图片的 alt / 路径需在源码模式修改
 - 未命名文档（还没保存过）没有崩溃快照与跨重启保留
 - 长文档（90 KB 以上）进入编辑模式会有 1~2 秒等待
-- 无 macOS / Linux 版本；不做插件机制、导出 Word/PDF、多窗口、LaTeX
+- 无 macOS / Linux 版本；不做插件机制、导出 Word/PDF、多窗口
 
 ## 许可
 
