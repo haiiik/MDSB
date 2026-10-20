@@ -408,7 +408,24 @@ watch(edit, (el) => {
   if (!el) return;
   attachEditScroll();
   restoreScroll("edit");
+  focusUntitledDoc();
 });
+
+/**
+ * 141：新建未命名档时，光标要**真的在文档里**。
+ *
+ * 之前点「+」之后焦点还留在按钮上，工具栏显示着「正文」但文档里没有光标，
+ * 而空白处又点不进去（见 EditView 那条样式注释）—— 用户就只能干看着。
+ * EditView 是异步组件，刚切过去时 ref 还是 null，所以按帧重试；
+ * 只在「未命名 + 一个字没写过 + 编辑档」这三个条件同时成立时才抢焦点，
+ * 别的场合（打开已有文档、切标签、切模式）一律不动用户现有的焦点与位置。
+ */
+function focusUntitledDoc(tries = 12): void {
+  const t = activeTab.value;
+  if (!t || t.path || t.markdown !== "" || t.mode !== "edit") return;
+  if (edit.value?.focusStart()) return;
+  if (tries > 0) requestAnimationFrame(() => focusUntitledDoc(tries - 1));
+}
 
 /**
  * 换标签就是一次新的阅读，不是换档 —— 上一张档没兑现完的那笔换算必须作废，
@@ -418,6 +435,7 @@ watch(edit, (el) => {
 watch(
   () => activeTab.value?.id,
   () => {
+    focusUntitledDoc();
     pending = null;
     // 关掉的标签不该继续占着几何与锚点：按现存的标签集合裁一次
     const 活着 = new Set(tabs.list.map((t) => t.id));

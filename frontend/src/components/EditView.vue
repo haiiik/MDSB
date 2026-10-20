@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { Node as PMNode } from "prosemirror-model";
 import { baseKeymap, toggleMark } from "prosemirror-commands";
-import { EditorState, type Command, type Transaction } from "prosemirror-state";
+import { EditorState, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import type { DirectEditorProps } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
 import { closeHistory, history, redo, undo } from "prosemirror-history";
@@ -430,6 +430,18 @@ defineExpose({
     if (scroller.value) scroller.value.scrollTop = v;
   },
   getScrollTop: () => scroller.value?.scrollTop ?? 0,
+  /**
+   * 141：新建未命名档时把光标真的放进文档里。
+   * 点「+」之后焦点还停在那颗按钮上，工具栏显示着「正文」但文档里没有光标，
+   * 用户的第一反应是「那我在页面上点一下」—— 而空白处点了也没用（见上面那条样式注释）。
+   * 两处一起修：这里负责落光标，样式负责让整页可点。
+   */
+  focusStart: () => {
+    if (!view) return false;
+    view.focus();
+    view.dispatch(view.state.tr.setSelection(TextSelection.atStart(view.state.doc)));
+    return true;
+  },
   editorView: () => view,
   /**
    * 127：导航点第 `i` 个标题就跳到它。
@@ -499,10 +511,43 @@ defineExpose({
 
 .edit-pane__host {
   min-height: 100%;
+  /*
+   * 141：新建一篇没字的文档时，可编辑区原本只有「一行高」（26px），
+   * 下面半屏的空白不属于 contenteditable —— 点那里等于点了页面背景，
+   * 光标不落进去、键盘也打不出字（实测：点 y=516 的空白后 activeElement 变成 BODY）。
+   * 所以把高度沿 host → .hp-doc → .hp-edit 一路传下去，整页都是可编辑区。
+   * 用 flex 而不是百分比 min-height：百分比要父级有确定高度才生效，这里父级是 auto。
+   */
+  display: flex;
+  flex-direction: column;
 }
 
-/* 让 PM 的容器不吃掉 .hp-doc 的排版：编辑器本身只是包一层 */
+.edit-pane :deep(.hp-doc) {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  /*
+   * `width: 100%` 不是多余的：`.hp-doc` 带着 `margin: 0 auto` 做居中，
+   * 而它现在是一个**纵向 flex 容器的子项** —— 交叉轴上有 auto 边距时浏览器不再拉伸它，
+   * 于是整篇塌成「只剩内边距」的 64px 宽（实测），可编辑区宽度直接归零。
+   * 给了显式宽度后 `max-width: 900px` + auto 边距照常居中。
+   */
+  width: 100%;
+}
+
+/*
+ * 挂载点 `.hp-edit` 只是容器，**真正可编辑的是它里面 PM 自己的 `.ProseMirror`**
+ * （实测链：.ProseMirror 26px 在 .hp-edit 469px 里 —— 只把外层撑高没用，
+ * 点空白仍然落在外层 div 上，光标进不去）。所以两层都要铺满。
+ */
 .edit-pane :deep(.hp-edit) {
   outline: none;
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-pane :deep(.hp-edit > .ProseMirror) {
+  flex: 1 0 auto;
 }
 </style>

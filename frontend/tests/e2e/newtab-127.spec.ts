@@ -180,3 +180,57 @@ test("未命名文档粘图片：给一句可读的拒绝，不是默默吞掉",
   // 正文不该被插进一条坏的图片引用
   await expect(page.locator(".ProseMirror")).toHaveText("");
 });
+
+/* ------------------------------------------------------------------ 141 */
+
+/**
+ * 141（她的实测：「新增 markdown 文件时，你默认选中了正文，但此时光标没在页面上，
+ * 我在页面上点击也没用」）。两半都要钉住：
+ * ① 点完「+」光标**已经在文档里**，不用先点一下页面；
+ * ② 正文区下方那一大片空白**属于可编辑区**，点进去能落光标、能打字。
+ *
+ * ②是根因：空文档时 `.ProseMirror` 只有一行高（实测 26px），下面半屏不是
+ * contenteditable —— 点那里 activeElement 直接掉回 BODY，键盘输入无处可去。
+ * 127 原来那条用例是「先 click 再 type」，正好绕过了这个洞，所以它一直是绿的。
+ */
+test("141：新建未命名档不用先点一下，光标已经在文档里", async ({ page }) => {
+  await page.getByTestId("tab-new").click();
+  await expect(page.locator(".ProseMirror")).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.className ?? ""), { timeout: 4000 })
+    .toContain("ProseMirror");
+  await page.keyboard.type("第一段");
+  await expect(page.locator(".ProseMirror")).toContainText("第一段");
+});
+
+test("141：可编辑区铺满整页，点正文下方空白也能落光标打字", async ({ page }) => {
+  await page.getByTestId("tab-new").click();
+  await page.locator(".ProseMirror").waitFor();
+  await page.waitForTimeout(400);
+  const 几何 = await page.evaluate(() => {
+    const box = document.querySelector<HTMLElement>(".edit-pane__scroll")!.getBoundingClientRect();
+    const pm = document.querySelector<HTMLElement>(".ProseMirror")!.getBoundingClientRect();
+    const 点x = Math.round(box.x + box.width / 2);
+    const 点y = Math.round(box.y + box.height * 0.7);
+    return {
+      点x,
+      点y,
+      可编辑区: { 上: Math.round(pm.top), 下: Math.round(pm.bottom), 左: Math.round(pm.left), 右: Math.round(pm.right) },
+      容器底: Math.round(box.bottom),
+      空白在可编辑区内: 点y > pm.top && 点y < pm.bottom && 点x > pm.left && 点x < pm.right,
+    };
+  });
+  /*
+   * 根因判据：**要点的那片空白落在可编辑区的矩形里**。
+   * 第一版这里写的是「可编辑区要铺到容器底部」，那是我的想象：`.hp-doc` 本来就有 96px 下内边距，
+   * 铺到底永远不成立 —— 判据本身错了会让一条好修复一直红。真正的因由是「空白属不属于可编辑区」。
+   */
+  expect(几何.空白在可编辑区内, JSON.stringify(几何)).toBe(true);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
+  await page.mouse.click(几何.点x, 几何.点y);
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.className ?? ""), { timeout: 3000 })
+    .toContain("ProseMirror");
+  await page.keyboard.type("点在空白上");
+  await expect(page.locator(".ProseMirror")).toContainText("点在空白上");
+});
