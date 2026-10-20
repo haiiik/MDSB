@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build --mode production",
-    "build:dev": "vue-tsc --noEmit && vite build --minify false --mode development",
+    "build": "vue-tsc --noEmit -p tsconfig.json && vite build --mode production",
+    "build:dev": "vue-tsc --noEmit -p tsconfig.json && vite build --minify false --mode development",
     "preview": "vite preview",
     "test": "vitest run --no-file-parallelism && playwright test --grep-invert @perf && playwright test --grep @perf --workers=1",
     "test:unit": "vitest run",
