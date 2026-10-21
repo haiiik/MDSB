@@ -295,6 +295,37 @@ test("142 审计：代码块里按 Tab 是缩进，制表符落盘留得住", as
   expect(await savedOf(page)).toContain("let a = 1;\n" + 制表符 + "let b = 2;");
 });
 
+test("142 审计：代码块里选中一段按 Tab，不许把选中的字换成制表符", async ({ page }) => {
+  await 打开文档(page, "```js\nlet a = 1;\nlet b = 2;\n```\n");
+  await setMode(page, "edit");
+  await page.waitForSelector('[data-testid="pm-code-block"]');
+  /*
+   * review 抓的这条：`tr.insertText("\t")` 不传区间走的是 `replaceSelection`，
+   * 选区非空时会把**整段选中内容换成一个制表符** ——
+   * 从别处整段复制代码粘进来、顺手按个 Tab 就静默丢字。
+   * 现在选区非空一律让开（链尾的 swallowTab 接住事件：焦点不丢、内容也不丢）。
+   */
+  await page.evaluate(() => {
+    const code = document.querySelector('[data-testid="pm-code-block"] code');
+    const t = code?.firstChild;
+    if (!t) throw new Error("代码块里没有文字节点");
+    const r = document.createRange();
+    r.setStart(t, 0);
+    r.setEnd(t, "let a = 1;".length);
+    const s = getSelection();
+    s?.removeAllRanges();
+    s?.addRange(r);
+  });
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Control+s");
+  // 什么都不该发生：不脏、两行代码都在、也没多出制表符
+  await expect(page.getByTestId("tab-dirty")).toHaveCount(0);
+  const 保存后 = await savedOf(page);
+  expect(保存后).toContain("let a = 1;");
+  expect(保存后).toContain("let b = 2;");
+  expect(保存后).not.toContain(String.fromCharCode(9));
+});
+
 test("142 审计：以引用块结尾，末尾那一行在引用块**外面**", async ({ page }) => {
   await 打开文档(page, "正文。\n\n> 引用的话。\n");
   await setMode(page, "edit");

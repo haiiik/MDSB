@@ -172,7 +172,9 @@ export function needsTrailingParagraph(doc: PMNode): boolean {
  * 需要时在文档末尾补一个空段落；不需要就原样返回同一个节点。
  *
  * **补的那一段不带源区间**（`srcFrom/srcTo` 为 null），于是它走的是 103 已经有的
- * 「新块」分支：不碰原文，她真在里面打字时按纯插入回写。
+ * 「新块」分支：不碰原文。她真在里面打字时，这一行是 `sourceDoc` 里那个**旧的无源块**，
+ * 回写走的是 `changedBlocks` 的「边界往外退到最近有源邻居」那条分支
+ * （**不是**纯插入分支 —— 别看错，`patches.ts` 的 pushRegion 里两种形状都有用例）。
  * 调用点在 `EditView.buildState`：必须在 `sourceDoc = state.doc` 之前补，
  * 否则「打开一篇以表格结尾的文件」会被算成改动、把脏点白白点亮（104 的恒等判据）。
  */
@@ -308,8 +310,14 @@ export const exitTableBelow: Command = (state, dispatch) => {
  *
  * 只认这两种「内容逐字保留」的块。`footnote_def` 也是 code:true，但它的续行缩进存在属性上、
  * 由 `joinFootnoteDef` 拼回，正文里再塞制表符会让缩进变成两处一起动，所以不放进来。
+ *
+ * **选区非空时一律不处理**：`tr.insertText("\t")` 不传区间走的是 `replaceSelection`，
+ * 那会**把选中的那段字换成一个制表符** —— 从别处整段复制代码粘进来、顺手按个 Tab
+ * 就静默吃掉选区，比"Tab 没反应"严重得多。让开之后链尾的 `swallowTab` 接住事件，
+ * 焦点不丢、内容也不丢。
  */
 const insertTabInCode: Command = (state, dispatch) => {
+  if (!state.selection.empty) return false;
   const 类型 = state.selection.$from.parent.type.name;
   if (类型 !== "code_block" && 类型 !== "math_block") return false;
   if (state.selection.$from.parent.type.spec.code !== true) return false;
@@ -337,10 +345,16 @@ const swallowTab: Command = () => true;
  */
 export const cellEnterBreak: Command = (state, dispatch) => {
   if (!isInTable(state)) return false;
-  const $cursor = state.selection instanceof TextSelection ? state.selection.$cursor : null;
-  if (!$cursor) return false;
-  const { cell } = tableDepths($cursor);
+  const { cell } = tableDepths(state.selection.$from);
   if (cell === null) return false;
+  /*
+   * **选区不是一个插入符时接住回车、什么都不做**（review 抓的：原来只认 `$cursor`，
+   * 非光标就返回 false 落回 `baseKeymap` 的 `splitBlock` —— 正是这条注释宣称消灭的拆段落，
+   * 拖选一片格子、格子里选中一张图片、甚至只是用鼠标划选了一格里的几个字，都会走到那）。
+   * 这里不猜她想干什么：拆段落丢字，给选区每一格插一个换行也是猜。
+   */
+  const $cursor = state.selection instanceof TextSelection ? state.selection.$cursor : null;
+  if (!$cursor) return true;
   const br = cellBreak(state.schema);
   if (!br) return false;
   if (dispatch) dispatch(state.tr.replaceSelectionWith(br).scrollIntoView());

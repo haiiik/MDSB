@@ -1,4 +1,7 @@
 import { Fragment, type Node as PMNode } from "prosemirror-model";
+import { EditorState, TextSelection, type Transaction } from "prosemirror-state";
+import { CellSelection } from "prosemirror-tables";
+import { cellEnterBreak } from "../../src/kernel/pm/plugins";
 import { describe, expect, it } from "vitest";
 import { parseMd } from "../../src/kernel/md";
 import { serializeBlock, topBlocks } from "../../src/kernel/blockPatch";
@@ -131,5 +134,51 @@ describe("表格在 PM 文档里合法", () => {
     const table = kids(doc)[0];
     expect(kids(table)[0].child(0).type.name).toBe("table_header");
     expect(kids(table)[1].child(0).type.name).toBe("table_cell");
+  });
+});
+
+/**
+ * 142：格子里按回车 = 插入 `<br>`，但**只有插入符才这么做**。
+ *
+ * 拖选一片格子（CellSelection）、格子里选中一张图片（NodeSelection）、
+ * 甚至用鼠标划选了一格里的几个字 —— 这些都不是插入符。
+ * 原来这条命令在这种时候返回 false，于是落回 `baseKeymap` 的 `splitBlock`：
+ * **正是这颗工单宣称消灭的"拆第二个段落 → 落盘摊平丢换行"**（review 抓的）。
+ * 现在接住回车、什么都不做：不猜语义，也不丢字。
+ */
+describe("142：格子里回车的两种选区", () => {
+  const 表格doc = () => mdastToDoc("| 甲 | 乙 |\n| --- | --- |\n| 1 | 2 |\n", hpSchema);
+  const 格子位置 = (d: PMNode): number[] => {
+    const out: number[] = [];
+    d.descendants((node, pos) => {
+      if (node.type.name === "table_cell" || node.type.name === "table_header") out.push(pos);
+      return true;
+    });
+    return out;
+  };
+
+  it("插入符 → 真的插进一个 <br> 表示", () => {
+    const d = 表格doc();
+    const 甲 = 格子位置(d)[2]; // 第二行第一格
+    const state = EditorState.create({ schema: hpSchema, doc: d, selection: TextSelection.create(d, 甲 + 3) });
+    let 新事务: Transaction | null = null;
+    expect(cellEnterBreak(state, (t) => (新事务 = t))).toBe(true);
+    expect(新事务).not.toBeNull();
+    const 格 = 新事务!.doc.child(0).child(1).child(0);
+    expect(格.childCount).toBe(1); // **没有**拆成第二个段落
+    expect(kids(格)[0].children.some((x) => x.type.name === "opaque_inline")).toBe(true);
+  });
+
+  it("拖选一整片格子 → 接住回车但一个字节都不改", () => {
+    const d = 表格doc();
+    const [头1, 头2] = 格子位置(d);
+    const state = EditorState.create({
+      schema: hpSchema,
+      doc: d,
+      selection: new CellSelection(d.resolve(头1), d.resolve(头2)),
+    });
+    let 派发了 = false;
+    expect(cellEnterBreak(state, () => (派发了 = true))).toBe(true);
+    expect(派发了, "多格选中时不许拆段落、也不许给每格插换行").toBe(false);
   });
 });

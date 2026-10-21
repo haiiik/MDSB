@@ -2,7 +2,9 @@ import { Fragment, Slice } from "prosemirror-model";
 import { EditorState, TextSelection } from "prosemirror-state";
 import type { Transaction } from "prosemirror-state";
 import { describe, expect, it } from "vitest";
+import { closeHistory, history, undo } from "prosemirror-history";
 import { HISTORY_GROUP_DELAY_MS, HP_STEP_META, isTypingTransaction } from "../../src/kernel/pm/history";
+import { documentShapePlugin } from "../../src/kernel/pm/plugins";
 import { mdastToDoc } from "../../src/kernel/pm/mdastToDoc";
 import { hpSchema } from "../../src/kernel/pm/schema";
 import { blockCommand, toggleBold } from "../../src/kernel/pm/toolbar";
@@ -96,5 +98,61 @@ describe("结构操作：自成一步", () => {
 describe("合并窗口只有一个来源", () => {
   it("500ms —— 工单建议的起点，要改必须同时回写 117 完成记录", () => {
     expect(HISTORY_GROUP_DELAY_MS).toBe(500);
+  });
+});
+
+/**
+ * 142：形状插件那笔「末尾补一行」的事务不许把撤销拆成两步。
+ *
+ * 机制上它是 `appendTransaction` 追加的，与触发它的那笔事务在**同一次 apply 轮次**里，
+ * `prosemirror-history` 的 appendTransaction 收到的是这一整批事务 → 记成同一个历史事件。
+ * 这条判据钉的就是"同一个事件"：粘一张表（末尾被补了一行）之后按一次 Ctrl+Z，
+ * 要直接回到原文，而不是"撤掉补行 → 又被加回来"空转。
+ * review 提过这里可能污染撤销栈，实测不复现 —— 但**没有判据的"没问题"不算数**，所以钉上。
+ */
+describe("142：补行与撤销栈", () => {
+  const 表 = () =>
+    hpSchema.nodes.table.create(null, [
+      hpSchema.nodes.table_row.create(null, [
+        hpSchema.nodes.table_header.createAndFill()!,
+        hpSchema.nodes.table_header.createAndFill()!,
+      ]),
+      hpSchema.nodes.table_row.create(null, [
+        hpSchema.nodes.table_cell.create(null, Fragment.from(hpSchema.text("采油"))),
+        hpSchema.nodes.table_cell.create(null, Fragment.from(hpSchema.text("12"))),
+      ]),
+    ]);
+  const 形状 = (s: EditorState) => Array.from(s.doc.children).map((x) => x.type.name);
+
+  it("整篇换成一张表（补行被触发）→ 一次 Ctrl+Z 回到原文", () => {
+    let state = EditorState.create({
+      schema: hpSchema,
+      doc: mdastToDoc("原有的一段。\n"),
+      plugins: [history(), documentShapePlugin()],
+    });
+    state = state.apply(closeHistory(state.tr.replaceWith(0, state.doc.content.size, 表())));
+    state = state.apply(closeHistory(state.tr));
+    expect(形状(state)).toEqual(["table", "paragraph"]); // 补行确实被触发了
+
+    undo(state, (t) => (state = state.apply(t)));
+    expect(state.doc.textContent).toBe("原有的一段。");
+    expect(形状(state)).toEqual(["paragraph"]);
+  });
+
+  it("粘表 → 在补出来的那行打字 → 两次 Ctrl+Z 回到原文（不是空转）", () => {
+    let state = EditorState.create({
+      schema: hpSchema,
+      doc: mdastToDoc("原有的一段。\n"),
+      plugins: [history(), documentShapePlugin()],
+    });
+    state = state.apply(closeHistory(state.tr.replaceWith(0, state.doc.content.size, 表())));
+    state = state.apply(closeHistory(state.tr));
+    state = state.apply(state.tr.insertText("正文", state.doc.content.size - 1));
+    expect(state.doc.textContent).toBe("采油12正文");
+
+    undo(state, (t) => (state = state.apply(t)));
+    expect(state.doc.textContent).toBe("采油12");
+    undo(state, (t) => (state = state.apply(t)));
+    expect(state.doc.textContent).toBe("原有的一段。");
   });
 });

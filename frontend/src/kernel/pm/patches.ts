@@ -121,8 +121,11 @@ export function changedBlocks(oldDoc: PMNode, newDoc: PMNode, source: string): B
      * 连着两块粘贴进来的块（或一块粘贴 + 末尾补的那行）都改过时，`prev.to` 与 `next.from` 也是 null。
      * 旧代码在这里直接兜到 0 或 `source.length`，等于把「区间外那些没原文的块」连它们的字节
      * 一起换掉 —— 那是**丢块**，比粘住更糟。所以：
-     * 左边界退到 L 之后，`L 与区域之间的那些无源块` 必须重新序列化写回（它们没被改，
-     * 内容就是上一次由我们写进去的那串字节，再序列化一次是幂等的）；右边界同理。
+     * 左边界退到 L 之后，`L 与区域之间的那些无源块` 必须重新序列化写回；右边界同理。
+     * **代价要如实写**（review 提的，别把这条当成"绝对不动"）：这一串是**按当前 PM 状态重序列化**，
+     * 不是逐字节搬回原文 —— 段落、标题这类逐字映射的块重序列化就是原来那串；
+     * 表格若被别的编辑器改过列宽，会被我们顺手归一次列宽（与 111 的"改任一格子整块重排"同一条既定代价）。
+     * 方向仍然比旧写法好：旧写法是**丢整块**。
      */
     let from = first?.from ?? null;
     let to = last?.to ?? null;
@@ -162,7 +165,13 @@ export function changedBlocks(oldDoc: PMNode, newDoc: PMNode, source: string): B
     );
     let md = 段.join("\n\n");
     if (补前空行 && from > 0) md = "\n\n" + md;
-    if (补后空行 && md !== "") md = md + "\n\n";
+    /*
+     * 判据用 `段.length`（这次到底有没有写下内容），**不能用 `md !== ""`**：
+     * 上一行刚给 `md` 加过前导空行，纯删除时 `md` 就不是空串了，
+     * 于是给一个"后面根本没有内容"的位置再补一段空行 ——
+     * 实测删掉一个无源区间的中间块会留下 `甲段\n\n\n\n丙段`（双空行）。
+     */
+    if (补后空行 && 段.length) md = md + "\n\n";
     patches.push({ from, to, md });
   };
 

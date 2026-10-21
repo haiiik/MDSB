@@ -245,6 +245,20 @@ describe("changedBlocks 只点名真变了的块", () => {
       const out = applyChanges(md, doc, next).text;
       expect(out).toBe("甲段\n\n乙改\n\n丙改\n");
     });
+
+    /**
+     * review 抓到的一条（我自己没测到）：**纯删除一个无源块时不许留下双空行**。
+     *
+     * 后导空行那条判据原来写的是 `md !== ""`，而上一行刚给 `md` 加过前导空行，
+     * 于是"后面根本没有内容"的位置也被补了一段空行 → `甲段\n\n\n\n丙段`。
+     * 判据改成看**这次到底有没有写下内容**（`段.length`）。
+     */
+    it("删掉中间那块无源块 → 只留一个空行，不是一串", () => {
+      const 删掉 = hpSchema.nodes.doc.create(null, [doc.child(0), doc.child(2)]);
+      const out = applyChanges(md, doc, 删掉).text;
+      expect(out).toBe("甲段\n\n丙段\n");
+      expect(out).not.toMatch(/\n{3,}/);
+    });
   });
 });
 
