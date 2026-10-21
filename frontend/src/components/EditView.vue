@@ -582,4 +582,70 @@ defineExpose({
 .edit-pane :deep(.hp-doc) {
   padding-bottom: 0;
 }
+
+/*
+ * 143：编辑档的**行间距与阅读档不一致**（她两张图：同一篇文档，编辑档的表格行明显更高，
+ * 任务项之间空出一大截，而且文字掉到方框下面一行去了）。
+ *
+ * 根因不是字号也不是行高，是**多出来的一层块**：
+ * PM 的 `table_cell` / `list_item` 内容必须是块（`cellContent: "paragraph+"`、`list_item: "block+"`），
+ * 于是每个格子、每一项里都包着一个 `<p>`，而 `.hp-doc p` 带着 `margin: 0 0 1em` ——
+ * 阅读档的格子里是行内文字、没有这层段落，所以两边每行差出整整一个 1em。
+ * 实测（浏览器 mock、100% 缩放）：任务项 26px → 53px，表格行 39px → 54px。
+ * 段落外边距在**容器内部**没有意义（它撑的是行高，不是块间距），这里就地清零。
+ */
+.edit-pane :deep(.hp-doc th > p),
+.edit-pane :deep(.hp-doc td > p) {
+  margin: 0;
+}
+
+/*
+ * 列表项里那层段落的外边距：见上面 143 那条注释里的同一根因。
+ * 三种位置都要管：本项最后一段、以及**后面跟着嵌套列表**的那一段
+ * （嵌套列表自己带 0.25em 间距，段落的 1em 再叠上去就是阅读档没有的 15px；
+ *  任务项的那段在 `li > div` 里，所以两组都要写）。
+ */
+.edit-pane :deep(.hp-doc li > p:last-child),
+.edit-pane :deep(.hp-doc li > div > p:last-child),
+.edit-pane :deep(.hp-doc li > p:has(+ ul)),
+.edit-pane :deep(.hp-doc li > p:has(+ ol)),
+.edit-pane :deep(.hp-doc li > div > p:has(+ ul)),
+.edit-pane :deep(.hp-doc li > div > p:has(+ ol)) {
+  margin-bottom: 0;
+}
+
+/*
+ * 任务项：PM 的 `toDOM` 是 `li > input + div`（那个 div 装着本项的全部内容），
+ * div 是块级 → **文字整块掉到方框下面一行**；圆点也没关 ——
+ * 阅读档靠 `li.task-list-item` 这个类关圆点，PM 渲染出来的是 `li[data-hp-task]`，没人认它。
+ *
+ * 修法：把方框**浮动**起来，让第一行被它挤短、后面的行回到本项左缘 ——
+ * 这正是阅读档"方框是行内元素"时的换行形状，两档逐行一致。
+ * 两条走过的弯路都记下来，别再试：
+ * ① `div { display: inline }`（想让文字真的行内）：几何判据全绿，但**功能坏了** ——
+ *    任务项转换的那一刻 PM 要在新 DOM 里重放光标，行内化的 contentDOM 让它放不准，
+ *    「`- [ ] 买牛奶`」打出来只剩一个 `-`（`edit-input-rules.spec.ts` 那条两步规则红在这里）。
+ * ② `li { display: flex }` + 基线对齐：方框与首行也对齐了，但整个文字列比方框那一列窄，
+ *    同一项在阅读档折 2 行、在编辑档折 3 行，两档还是不一致。
+ * 所以只能"保持块级结构 + 让方框浮动"，`::after` 清浮点是防止方框溢到下一项上。
+ */
+.edit-pane :deep(.hp-doc li[data-hp-task]) {
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.edit-pane :deep(.hp-doc li[data-hp-task] > input[type="checkbox"]) {
+  float: left;
+}
+
+/*
+ * 不额外清浮点：方框只有 13px 高，而本项最小一行是 26px，浮不出来。
+ * 反倒**不能**加 `::after { clear: both }` —— 那会让本项的最后一段外边距不再与项自己的
+ * 下边缘合并（清浮点的元素挡住了 margin collapsing），实测带嵌套列表的那一项因此
+ * 比阅读档高 15px（正好一个 1em）。
+ */
+
+.edit-pane :deep(.hp-doc li[data-hp-task] > div > p:last-child) {
+  margin-bottom: 0;
+}
 </style>
