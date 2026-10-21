@@ -16,7 +16,16 @@ import { hpInputRules } from "../kernel/pm/inputRules";
 import { HISTORY_GROUP_DELAY_MS, isTypingTransaction } from "../kernel/pm/history";
 import { richPastePlugin } from "../kernel/pm/pastePlugin";
 import { undoInputRule } from "prosemirror-inputrules";
-import { footnoteJumpPlugin, listKeymap, tableTabKeymap, taskListPlugin } from "../kernel/pm/plugins";
+import {
+  documentShapePlugin,
+  ensureTrailingParagraph,
+  footnoteJumpPlugin,
+  listKeymap,
+  tableEnterKeymap,
+  tabKeymap,
+  taskListPlugin,
+
+} from "../kernel/pm/plugins";
 import { tableMenuPlugin } from "../kernel/pm/tableMenu";
 import { changedBlocks } from "../kernel/pm/patches";
 import { hpSchema } from "../kernel/pm/schema";
@@ -195,7 +204,11 @@ function commit() {
 function buildState(md: string) {
   return EditorState.create({
     schema: hpSchema,
-    doc: mdastToDoc(md, hpSchema),
+    // 142：末尾补一行「能写字的行」，**必须在 `sourceDoc = state.doc` 之前**做完。
+    // 只靠插件的 appendTransaction 补，它就落在 sourceDoc 之外 ——
+    // 于是打开一篇以表格结尾的文件、只改一个错别字，也会在文件末尾多出两行空白
+    // （空段落作为「相对基准的新块」按纯插入回写）。104 的恒等判据不允许这样。
+    doc: ensureTrailingParagraph(mdastToDoc(md, hpSchema)),
     // 105 的教训：只给 schema + doc 是**不能用的编辑器**。
     // 打字能进是靠 beforeinput，而 Enter 拆块、Backspace 合并块这些是**命令**，
     // 没有 keymap 就没人绑定，表现成「按回车没反应」且完全不报错。
@@ -228,11 +241,19 @@ function buildState(md: string) {
         "Mod-y": redo,
       }),
       listKeymap(hpSchema.nodes.list_item),
-      tableTabKeymap(),
+      // 142：表格与 Tab 的键位，同样必须在 baseKeymap 之前 ——
+      // 否则 Enter 先被 `splitBlock` 吃掉（格子里拆第二段、落盘把「甲」「乙」并成「甲乙」）；
+      // 而 Tab 在 baseKeymap 里**根本没有绑定**，浏览器默认行为是把焦点移走，
+      // 她接着打的字全落在页面背景上（实测空档按 Tab，activeElement 变成底栏的模式按钮）。
+      tableEnterKeymap(),
+      tabKeymap(),
       taskListPlugin(),
       footnoteJumpPlugin(),
       tableMenuPlugin(),
       keymap(baseKeymap),
+      // 142：文档形状的两条不变式（末尾留一行能写字的 + 把 PM 自动填空掉出来的空占位块换回段落）。
+      // 放在最后一项：它守的是「所有事务落定之后」的形状，前面的键位与粘贴各写各的。
+      documentShapePlugin(),
     ],
   });
 }
@@ -549,5 +570,16 @@ defineExpose({
 
 .edit-pane :deep(.hp-edit > .ProseMirror) {
   flex: 1 0 auto;
+  /*
+   * 142：把 `.hp-doc` 那 96px 的页底留白**搬进可编辑区里面**。
+   * 留白在 article 的 padding 上时不属于 contenteditable，
+   * 最后一段下面那一条点了没反应（141 只把容器撑满，没管这条）；
+   * 搬进来之后「点正文下方空白 = 光标落到最后一行」，视觉上的留白一分不少。
+   */
+  padding-bottom: 96px;
+}
+
+.edit-pane :deep(.hp-doc) {
+  padding-bottom: 0;
 }
 </style>

@@ -1,10 +1,12 @@
 import { liftListItem, splitListItem } from "prosemirror-schema-list";
-import { goToNextCell } from "prosemirror-tables";
+import { goToNextCell, isInTable } from "prosemirror-tables";
 import { chainCommands } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
-import { Plugin, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
-import type { NodeType } from "prosemirror-model";
+import { Plugin, TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
+import { Fragment, type Node as PMNode, type NodeType } from "prosemirror-model";
 import type { EditorView } from "prosemirror-view";
+import { cellBreak } from "./mdastToDoc";
+import { INPUT_RULE_META } from "./inputRules";
 
 /**
  * 107：列表与任务清单的编辑行为。
@@ -122,14 +124,235 @@ export function listKeymap(itemType: NodeType) {
 /**
  * 111：表格内的 Tab / Shift-Tab 在单元格间移动。
  *
- * `baseKeymap` 不含表格导航，必须由 `prosemirror-tables` 的 `goToNextCell` 提供；
- * 不在表格里时它返回 false，所以放在列表键位之后不会抢走别的 Tab。
+ * `baseKeymap` 不含表格导航，必须由 `prosemirror-tables` 的 `goToNextCell` 提供。
+ *
+ * 142：这一条键位顺手收住了三个「Tab 之后字没了」的口子（链式，前一个返回 false 才轮到后一个）：
+ * - 最后一格按 Tab → 出表格、落到下面那一行（`exitTableBelow`）；
+ * - 代码块 / 公式块里按 Tab → 插入一个制表符当缩进（`baseKeymap` 没绑 Tab，
+ *   原来浏览器默认行为是**把焦点移走**，她接着打的字全落在页面背景上）；
+ * - 正文里按 Tab → 什么都不做，但**也不许把焦点弄丢**。
+ *   「Tab 在正文里到底是缩进还是制表符」没对齐（记 Q33），没对齐就别猜着上线，
+ *   接住事件比猜一个语义、比丢焦点都稳。
  */
-export function tableTabKeymap() {
+export function tabKeymap() {
   return keymap({
-    Tab: goToNextCell(1),
-    "Shift-Tab": goToNextCell(-1),
+    Tab: chainCommands(goToNextCell(1), exitTableBelow, insertTabInCode, swallowTab),
+    "Shift-Tab": chainCommands(goToNextCell(-1), swallowTab),
   });
+}
+
+/**
+ * 142：表格**结尾出不去**这一类问题的总修。
+ *
+ * 她的原话是「新建文件时从别的文件复制来表格，然后想另起一行写正文或标题，无法从下一行开始」。
+ * 拆成三个各自独立、缺一都还坏的动作：
+ *
+ * 1. `ensureTrailingParagraph`：**编辑模式的文档永远以普通段落收尾**
+ *    （最后一块不是段落、或者一个块都不剩，就补一个空段落）。
+ *    表格、分割线这类块**没有文本位置**，光标根本进不去「它们之后」；代码块 / 公式 / 脚注定义
+ *    有文本位置但进去就出不来（唯一的出口是 `baseKeymap` 里 `Mod-Enter` 的 exitCode，她不知道）；
+ *    标题 / 列表 / 引用块结尾则是「点下方空白，光标落进最后一块里」——
+ *    实测在引用块下面点一下，打的字变成引用块的第二段。
+ *    与其按「哪些块后面没法输入」列一张表（一定会漏），判据换成一句白话：
+ *    **末尾那一行必须是能直接写正文的一行**。补了这一行，↓、Tab、点下方空白三个自然手势全通。
+ *    补在**建 state 时**而不是只靠 appendTransaction：后者只在事务后跑，
+ *    「打开一篇以表格结尾的文件、什么也没做、直接点表格下面」这条路上它一次都没执行过。
+ * 2. `exitTableBelow`：Tab 到最后一格时落到表格下面那一行（`goToNextCell` 到最后一格返回 false，
+ *    Word/Excel 在这里都是「出表格」而不是「原地不动」）。
+ * 3. `cellEnterBreak`：格子里的回车不再拆第二个段落。
+ */
+
+/** 末尾那一行不是普通段落 = 「另起一行」没有落点；一个块都不剩时同理 */
+export function needsTrailingParagraph(doc: PMNode): boolean {
+  const last = doc.lastChild;
+  return !last || last.type.name !== "paragraph";
+}
+
+/**
+ * 需要时在文档末尾补一个空段落；不需要就原样返回同一个节点。
+ *
+ * **补的那一段不带源区间**（`srcFrom/srcTo` 为 null），于是它走的是 103 已经有的
+ * 「新块」分支：不碰原文，她真在里面打字时按纯插入回写。
+ * 调用点在 `EditView.buildState`：必须在 `sourceDoc = state.doc` 之前补，
+ * 否则「打开一篇以表格结尾的文件」会被算成改动、把脏点白白点亮（104 的恒等判据）。
+ */
+export function ensureTrailingParagraph(doc: PMNode): PMNode {
+  if (!needsTrailingParagraph(doc)) return doc;
+  const paragraph = doc.type.schema.nodes.paragraph;
+  if (!paragraph) return doc;
+  // `Node` 上没有 `append`，`Fragment.append` 又只收 Fragment，`Node.copy` 只一个参数
+  return doc.copy(doc.content.append(Fragment.from(paragraph.create())));
+}
+
+/**
+ * 运行期守住文档形状的两条不变式（同一条事务里一起守）：
+ * ① PM 自动填空掉出来的**空占位块**换成段落；
+ * ② 末尾永远留一行可以直接打字的普通段落（粘完一张表、或把末尾那行删掉之后都会用到）。
+ *
+ * 她删不掉末尾那个空段落 —— 与「文档永远有一行可以写字」是同一件事的两面，
+ * PM 自己也不允许文档一个块都不剩。
+ */
+export function documentShapePlugin(): Plugin {
+  return new Plugin({
+    appendTransaction: (transactions, _oldState, newState) => {
+      /*
+       * 只在**这一次真的改了文档**之后守形状。光标移动、以及
+       * `dispatchTransaction` 为结构操作补的那笔空 `closeHistory` 事务都不算 ——
+       * 补行本身就是一次 docChanged，会把下面要说的暂存清掉。
+       */
+      if (!transactions.some((tr) => tr.docChanged)) return null;
+      /*
+       * **输入规则刚触发的那一轮什么都不加**：`prosemirror-inputrules` 的暂存在任何
+       * 带 docChanged 的事务之后都会被清空，而我们这笔补行就是这样一个事务 ——
+       * 结果「打 `# ` 变标题 → 退格撤回」整条失效（实测撤回后连 `#` 都没了，
+       * 退格变成了普通的合并上一块）。让开这一轮，形状等到她下一次真改文档再守。
+       * 记账见 `inputRules.ts` 里 `INPUT_RULE_META` 那段。
+       */
+      if (transactions.some((tr) => tr.getMeta(INPUT_RULE_META))) return null;
+      const 修占位 = replaceEmptyPlaceholders(newState);
+      if (修占位) return 修占位;
+      if (!needsTrailingParagraph(newState.doc)) return null;
+      const paragraph = newState.schema.nodes.paragraph;
+      if (!paragraph) return null;
+      return newState.tr.insert(newState.doc.content.size, paragraph.create());
+    },
+  });
+}
+
+/**
+ * 142：把 PM **自动填空**掉出来的空占位块换成段落。
+ *
+ * 根因不在我们写的代码里，在 schema 的匹配表上：`createAndFill` / 删到空这类补位用的是
+ * `ContentMatch.defaultType`，它取的是「这个位置第一个不是文本、又没有必填属性的类型」，
+ * 而我们这张 schema 的 block 组排到第一的是 `opaque_block`
+ * （实测 `doc.contentMatch.defaultType.name === "opaque_block"`）。
+ * 症状很难看也很难查：**Ctrl+A + Backspace 之后文档变成一个「此内容编辑模式不修改」的块**，
+ * 打不了字、也删不掉，她只能关标签重开。
+ *
+ * 判据用「label 与 raw 都是空、又没有源区间」—— 真从 Markdown 解析出来的占位块
+ * 一定带着原文和标签（见 `mdastToDoc` 的 default 分支），三项全空的只可能是自动填出来的壳。
+ */
+function replaceEmptyPlaceholders(state: EditorState): Transaction | null {
+  const paragraph = state.schema.nodes.paragraph;
+  if (!paragraph) return null;
+  const 空壳位置: number[] = [];
+  state.doc.descendants((node, pos) => {
+    if (
+      node.type.name === "opaque_block" &&
+      !String(node.attrs.label ?? "") &&
+      !String(node.attrs.raw ?? "") &&
+      node.attrs.srcFrom == null
+    ) {
+      空壳位置.push(pos);
+    }
+    return true;
+  });
+  if (!空壳位置.length) return null;
+  const tr = state.tr;
+  // 从后往前换，前面的位置才不会因为替换而漂移（占位块是叶子，尺寸恒为 1）
+  for (const pos of 空壳位置.reverse()) tr.replaceRangeWith(pos, pos + 1, paragraph.create());
+  return tr;
+}
+
+/** 从光标往上找表格 / 单元格所在深度；`tableRole` 是 prosemirror-tables 打在 spec 上的标记 */
+function tableDepths($pos: { depth: number; node(d: number): PMNode }): {
+  cell: number | null;
+  table: number | null;
+} {
+  let cell: number | null = null;
+  let table: number | null = null;
+  for (let d = $pos.depth; d > 0; d--) {
+    const role = $pos.node(d).type.spec.tableRole;
+    if (role === "cell" || role === "header_cell") cell ??= d;
+    else if (role === "table") table ??= d;
+  }
+  return { cell, table };
+}
+
+/**
+ * Tab 在最后一格 → 把光标放到表格**下面那一行**。
+ *
+ * 判「是不是最后一格」用的是 `goToNextCell(1)(state)`：命令不传 `dispatch` 时
+ * 只回答「能不能走到下一格」而不改动任何东西（源码里 `if (dispatch)` 包着事务），
+ * 比自己算行列稳。
+ */
+export const exitTableBelow: Command = (state, dispatch) => {
+  if (!isInTable(state)) return false;
+  if (goToNextCell(1)(state)) return false;
+  const { table } = tableDepths(state.selection.$from);
+  if (table === null) return false;
+  const after = state.selection.$from.after(table);
+  const paragraph = state.schema.nodes.paragraph;
+  const $after = state.doc.resolve(after);
+
+  // 表格下面已经有块（多数情况就是 `ensureTrailingParagraph` 补的那一行）：直接落过去
+  if ($after.nodeAfter) {
+    const sel = TextSelection.near($after);
+    if (!sel) return false;
+    if (dispatch) dispatch(state.tr.setSelection(sel).scrollIntoView());
+    return true;
+  }
+  if (!paragraph) return false;
+  if (dispatch) {
+    // 表格是文档最后一块时（`nodeAfter` 为空才会走到这里），`after` 就是 `doc.content.size`，
+    // 插进去的段落正好占 `[after, after+1]`，所以落点是 `after + 1`。
+    // 这里不能用 `tr.mapping.map(after)`：`map` 默认 assocAfter，插入点上的位置会被推到新内容**之后**。
+    const tr = state.tr.insert(after, paragraph.create());
+    dispatch(tr.setSelection(TextSelection.create(tr.doc, after + 1)).scrollIntoView());
+  }
+  return true;
+};
+
+/**
+ * 142：代码块 / 块级公式里按 Tab = 插入一个制表符（缩进）。
+ *
+ * 只认这两种「内容逐字保留」的块。`footnote_def` 也是 code:true，但它的续行缩进存在属性上、
+ * 由 `joinFootnoteDef` 拼回，正文里再塞制表符会让缩进变成两处一起动，所以不放进来。
+ */
+const insertTabInCode: Command = (state, dispatch) => {
+  const 类型 = state.selection.$from.parent.type.name;
+  if (类型 !== "code_block" && 类型 !== "math_block") return false;
+  if (state.selection.$from.parent.type.spec.code !== true) return false;
+  if (dispatch) dispatch(state.tr.insertText("\t").scrollIntoView());
+  return true;
+};
+
+/**
+ * 142：正文里的 Tab **先接住，什么都不做**。
+ *
+ * 不接住的后果不是「Tab 没反应」，而是**焦点跑到工具栏/底栏上**（实测空档按 Tab，
+ * `activeElement` 变成底栏那颗 `statusbar__mode` 按钮），她接着打的字全落在页面背景上 ——
+ * 静默丢输入，比一条没绑定的键严重得多。
+ * Tab 在正文里的真语义（缩进？制表符？列表降格？）没对齐，记 **Q33** 等作者定，不猜着上线。
+ */
+const swallowTab: Command = () => true;
+
+/**
+ * 格子里按回车 → 插入单元格换行的既定表示（行内 `<br>`），**不拆第二个段落**。
+ *
+ * 拆段落不是「多一行」而是**丢字**：GFM 的单元格只有行内内容，`docToMdast` 把一个格子里
+ * 的多个段落逐个摊平进行内序列，实测「甲」「乙」两段落盘成 `| 甲乙 |` —— 换行没了。
+ * `cellBreak` 是 115 就定下的同一套表示（口径 Q2：单元格里的换行就是行内 HTML `<br>`），
+ * 文件里本来就写着 `<br>` 的那条路读的也是它，往返性质已有用例守着。
+ */
+export const cellEnterBreak: Command = (state, dispatch) => {
+  if (!isInTable(state)) return false;
+  const $cursor = state.selection instanceof TextSelection ? state.selection.$cursor : null;
+  if (!$cursor) return false;
+  const { cell } = tableDepths($cursor);
+  if (cell === null) return false;
+  const br = cellBreak(state.schema);
+  if (!br) return false;
+  if (dispatch) dispatch(state.tr.replaceSelectionWith(br).scrollIntoView());
+  return true;
+};
+
+/**
+ * 142：表格内的回车。放在 `listKeymap` 之后、`baseKeymap` 之前，
+ * 非表格时返回 false，Enter 照常落到 baseKeymap 的 `splitBlock`。
+ */
+export function tableEnterKeymap() {
+  return keymap({ Enter: cellEnterBreak });
 }
 
 /** 找某个 label 的脚注定义块在文档里的位置；找不到返回 null */

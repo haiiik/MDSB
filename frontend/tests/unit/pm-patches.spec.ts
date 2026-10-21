@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Fragment, type Node as PMNode } from "prosemirror-model";
+import { EditorState } from "prosemirror-state";
 import { describe, expect, it } from "vitest";
 import { patch, serializeBlock, topBlocks } from "../../src/kernel/blockPatch";
 import { roundTrip } from "../../src/kernel/roundtrip";
@@ -10,6 +11,7 @@ import { mdastToDoc } from "../../src/kernel/pm/mdastToDoc";
 import { blockToMdast } from "../../src/kernel/pm/docToMdast";
 import { hpSchema } from "../../src/kernel/pm/schema";
 import { applyChanges, changedBlocks } from "../../src/kernel/pm/patches";
+import { documentShapePlugin, ensureTrailingParagraph, needsTrailingParagraph } from "../../src/kernel/pm/plugins";
 
 /**
  * 103：源区间贯穿 + 块级差异。
@@ -168,6 +170,136 @@ describe("changedBlocks 只点名真变了的块", () => {
     const changed = replaceChild(doc, 1, paraWithRange("改了又", blocks[1].from, blocks[1].to));
     const back = replaceChild(changed, 1, paraWithRange("段落甲", blocks[1].from, blocks[1].to));
     expect(applyChanges(md, doc, back).text).toBe(md);
+  });
+
+  /**
+   * 142：**无源区间的旧块**不能拿邻居的边界当自己的边界。
+   *
+   * 两条都对应真路径：末尾那一行是 `ensureTrailingParagraph` 补出来的（没有原文），
+   * 中间那一段是粘贴落盘的块（同样没有原文）。少掉「往外退时补回空行」这一步，
+   * 写出来的就是 `| 采油 | 12 |补一句` 这种把下一段粘到表格最后一行上的坏文件。
+   */
+  it("142：末尾补的那一行被写进字 → 前后补回空行，末尾换行没被改掉", () => {
+    const md = "# 口径\n\n正文一段。\n\n| 部门 | 慢单数 |\n| :--- | ---: |\n| 采油 | 12 |\n";
+    const doc = mdastToDoc(md);
+    const withTail = insertChild(doc, kidsOf(doc).length, hpSchema.nodes.paragraph.create());
+    const typed = replaceChild(withTail, kidsOf(withTail).length - 1, para("补一句"));
+    const out = applyChanges(md, withTail, typed).text;
+
+    // 原文末尾那个换行保留，新段落与表格之间恰好一个空行
+    expect(out).toBe("# 口径\n\n正文一段。\n\n| 部门 | 慢单数 |\n| :--- | ---: |\n| 采油 | 12 |\n\n补一句\n");
+    // 表格仍是表格，新内容仍是独立的一段
+    const blocks = topBlocks(out);
+    expect(blocks.map((b) => b.node.type)).toEqual(["heading", "paragraph", "table", "paragraph"]);
+  });
+
+  it("142：改一个已落盘但没有源区间的块 → 邻居之间的空行不丢", () => {
+    const md = "甲段\n\n乙段\n\n丙段\n";
+    const 原块 = topBlocks(md);
+    // 模拟「乙段」是上一轮粘贴写进去的：文本里有它，但它没有源区间
+    const doc = hpSchema.nodes.doc.create(null, [
+      paraWithRange("甲段", 原块[0].from, 原块[0].to),
+      para("乙段"),
+      paraWithRange("丙段", 原块[2].from, 原块[2].to),
+    ]);
+    const next = replaceChild(doc, 1, para("乙段改过"));
+    const out = applyChanges(md, doc, next).text;
+    expect(out).toBe("甲段\n\n乙段改过\n\n丙段\n");
+    expect(out).not.toContain("甲段乙");
+    expect(out).not.toContain("丙段乙");
+  });
+
+  /**
+   * 142：区域两边**连着好几块都没有源区间**时，边界不能一路兜到文件头/文件尾。
+   *
+   * 旧写法（`from = prev.to ?? 0`、`to = next.from ?? source.length`）在这种情况下
+   * 会把「区间外那些没原文的块」连它们的字节一起换掉 —— 那是**整块丢内容**。
+   * 真路径很常见：连粘两段进来、再改其中一段；或改的就是末尾那一行旁边的一段。
+   */
+  describe("连续无源块：区间外的块要原样写回", () => {
+    const md = "甲段\n\n乙段\n\n丙段\n";
+    const 原块 = topBlocks(md);
+    // 乙、丙都是粘贴进来的：文本里有字节，但指不出区间
+    const doc = hpSchema.nodes.doc.create(null, [
+      paraWithRange("甲段", 原块[0].from, 原块[0].to),
+      para("乙段"),
+      para("丙段"),
+    ]);
+
+    it("改前一块（乙）→ 后面的丙一个字节没丢，空行也没并掉", () => {
+      const out = applyChanges(md, doc, replaceChild(doc, 1, para("乙段改过"))).text;
+      expect(out).toBe("甲段\n\n乙段改过\n\n丙段\n");
+      expect(topBlocks(out).length).toBe(3);
+    });
+
+    it("改后一块（丙）→ 前面的乙一个字节没丢", () => {
+      const out = applyChanges(md, doc, replaceChild(doc, 2, para("丙段改过"))).text;
+      expect(out).toBe("甲段\n\n乙段\n\n丙段改过\n");
+      expect(out).not.toContain("甲段乙段");
+      expect(topBlocks(out).length).toBe(3);
+    });
+
+    it("两块都改 → 两块的新内容都在，甲段仍逐字节不动", () => {
+      let next = replaceChild(doc, 1, para("乙改"));
+      next = replaceChild(next, 2, para("丙改"));
+      const out = applyChanges(md, doc, next).text;
+      expect(out).toBe("甲段\n\n乙改\n\n丙改\n");
+    });
+  });
+});
+
+describe("142：文档末尾永远留一行能写字的", () => {
+  const table = hpSchema.nodes.table.create(null, [
+    hpSchema.nodes.table_row.create(null, [hpSchema.nodes.table_cell.createAndFill()!]),
+  ]);
+  const hr = hpSchema.nodes.horizontal_rule.create();
+  const code = hpSchema.nodes.code_block.create(null, hpSchema.text("let a = 1;"));
+  const quote = hpSchema.nodes.blockquote.create(null, para("引用的话。"));
+  const list = hpSchema.nodes.bullet_list.create(null, [
+    hpSchema.nodes.list_item.create(null, [para("第一项")]),
+  ]);
+
+  it.each([
+    ["table", table],
+    ["horizontal_rule", hr],
+    ["code_block", code],
+    ["blockquote", quote],
+    ["bullet_list", list],
+    ["heading", hpSchema.nodes.heading.create({ level: 2 }, hpSchema.text("收尾"))],
+  ])("末尾是 %s → 补一个空段落", (_名, 块) => {
+    const doc = hpSchema.nodes.doc.create(null, [para("上面一段。"), 块]);
+    expect(needsTrailingParagraph(doc)).toBe(true);
+    const next = ensureTrailingParagraph(doc);
+    expect(kidsOf(next).map((n) => n.type.name)).toEqual(["paragraph", _名, "paragraph"]);
+    // 补的那一行**不带源区间**：它没有原文，回写时按纯插入落地（见上面那两条 patch 用例）
+    expect(kidsOf(next)[2].attrs.srcFrom).toBeNull();
+    // 补完就不再缺落点，第二次调用必须原样返回（幂等，appendTransaction 才不会反复触发）
+    expect(needsTrailingParagraph(next)).toBe(false);
+    expect(ensureTrailingParagraph(next)).toBe(next);
+  });
+
+  it("末尾已经是普通段落 → 什么都不补（也不许复制出一份新文档）", () => {
+    const doc = hpSchema.nodes.doc.create(null, [para("最后一句话。")]);
+    expect(needsTrailingParagraph(doc)).toBe(false);
+    expect(ensureTrailingParagraph(doc)).toBe(doc);
+  });
+
+  /**
+   * 142：Ctrl+A 删到空，**不许剩下一个打不了字的占位块**。
+   *
+   * 根因不在我们的代码里：PM 自动填空用 `ContentMatch.defaultType`，
+   * 它取「这个位置第一个不是文本、又没有必填属性的类型」，而这张 schema 的 block 组
+   * 排到第一的是 `opaque_block` —— 于是删干净之后文档变成「此内容编辑模式不修改」，
+   * 打字全落空。这条用例第一行就是盯着这张匹配表：顺序哪天变了，这里先红，别等到用户身上。
+   */
+  it("142：删到空之后文档是一个段落，而不是 PM 填出来的空占位块", () => {
+    expect(hpSchema.nodes.doc.contentMatch.defaultType?.name).toBe("opaque_block");
+    const doc = mdastToDoc("整篇都要删掉。\n");
+    let state = EditorState.create({ schema: hpSchema, doc, plugins: [documentShapePlugin()] });
+    state = state.apply(state.tr.delete(0, doc.content.size));
+    expect(kidsOf(state.doc).map((n) => n.type.name)).toEqual(["paragraph"]);
+    // 守门：这条事务之后文档必须合法（`check()` 会拒绝一个字的块都不剩的 doc）
+    expect(() => state.doc.check()).not.toThrow();
   });
 });
 

@@ -1,9 +1,10 @@
 import { Fragment, type Node as PMNode } from "prosemirror-model";
 import { EditorState, TextSelection, type Transaction } from "prosemirror-state";
-import type { InputRule } from "prosemirror-inputrules";
+import { undoInputRule, type InputRule } from "prosemirror-inputrules";
 import { describe, expect, it } from "vitest";
 import { hpSchema } from "../../src/kernel/pm/schema";
-import { HP_INPUT_RULES } from "../../src/kernel/pm/inputRules";
+import { HP_INPUT_RULES, hpInputRules } from "../../src/kernel/pm/inputRules";
+import { documentShapePlugin } from "../../src/kernel/pm/plugins";
 
 /**
  * 113：Markdown 输入规则。
@@ -177,5 +178,56 @@ describe("规则集合本身", () => {
     expect(HP_INPUT_RULES).toHaveLength(7);
     // 每条规则只应匹配自己那类前缀
     for (const r of HP_INPUT_RULES) expect(r.match.source.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * 142：形状插件与输入规则的**撤回暂存**抢同一笔事务。
+ *
+ * `prosemirror-inputrules` 的插件 state 写的是「任何带 docChanged 或 selectionSet 的事务
+ * 都把暂存清成 null」（`index.cjs:48`），而「末尾补一行」本身就是一次 docChanged ——
+ * 于是「打 `# ` 变标题 → 立刻退格撤回原样」整条失效（实测退格变成了普通的合并上一块，
+ * `#` 直接没了）。这条用例把让路的程度钉死：规则那一轮不加、只动光标也不加。
+ */
+describe("142：形状插件不许清掉输入规则的撤回暂存", () => {
+  it("打 `# ` 变标题之后暂存还在，退格能把那行撤回原样", () => {
+    let state = EditorState.create({
+      schema: hpSchema,
+      doc: doc(para("正文段落。"), para()),
+      plugins: [hpInputRules(), documentShapePlugin()],
+    });
+    const rules = state.plugins.find((p) => p.spec.isInputRules);
+    if (!rules?.props?.handleTextInput) throw new Error("没找到输入规则插件");
+    const 光标 = blockPos(state.doc, 1) + 1;
+    const view = {
+      composing: false,
+      get state() {
+        return state;
+      },
+      dispatch: (tr: Transaction) => {
+        state = state.apply(tr);
+      },
+    } as unknown as Parameters<typeof rules.props.handleTextInput>[0];
+
+    expect(rules.props.handleTextInput(view, 光标, 光标, "# ")).toBe(true);
+    // 末尾是标题、本该补一行 —— 这一轮必须让开
+    expect(Array.from(state.doc.children).map((x) => x.type.name)).toEqual(["paragraph", "heading"]);
+    expect(rules.getState(state)).toBeTruthy();
+
+    /*
+     * **只动光标**的那一笔：`handleTextInput` 里 `tr.setSelection(Selection.near(tr.doc.resolve(end)))`
+     * 会把 selectionSet 置上，而插件的 `state.apply` 写的是「docChanged **或** selectionSet 都清暂存」
+     * （`prosemirror-inputrules/dist/index.cjs:39`）。所以「打 `# ` 之后先动一下光标再退格」
+     * 本来就撤不回 —— 那是插件的既定行为，不是 142 造成的，这里如实记下来而不是假装能救。
+     * 这一笔真正要钉的是：**形状插件不许插进来补那一行**（补行才是这次新增的杀手）。
+     */
+    const 退格前 = state;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, 光标)));
+    expect(Array.from(state.doc.children).map((x) => x.type.name)).toEqual(["paragraph", "heading"]);
+    expect(rules.getState(state)).toBeNull();
+
+    expect(undoInputRule(退格前, (tr) => (state = state.apply(tr)))).toBe(true);
+    expect(state.doc.child(1).type.name).toBe("paragraph");
+    expect(state.doc.child(1).textContent).toBe("# ");
   });
 });

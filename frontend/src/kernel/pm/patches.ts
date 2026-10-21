@@ -93,25 +93,77 @@ export function changedBlocks(oldDoc: PMNode, newDoc: PMNode, source: string): B
     const newRun = newK.slice(nStart, nEnd);
     if (newRun.length === 0 && oStart >= oEnd) return;
 
-    if (oStart < oEnd) {
-      // 有旧块被替换 / 删除
-      const first = oldK[oStart];
-      const last = oldK[oEnd - 1];
-      const from = first.from ?? oldK[oStart - 1]?.to ?? 0;
-      let to = last.to ?? oldK[oEnd]?.from ?? source.length;
-      // 纯删除时顺手吃掉后随的空行，别在文档里留一串无意义空白
-      if (newRun.length === 0 && oldK[oEnd]?.from != null) to = oldK[oEnd].from as number;
-      const md = serializeRun(newRun);
-      patches.push({ from, to, md });
+    const prev = oldK[oStart - 1];
+    const next = oldK[oEnd];
+    const first = oldK[oStart];
+    const last = oldK[oEnd - 1];
+    const run = serializeRun(newRun);
+
+    if (oStart >= oEnd) {
+      // 纯插入：区间取零长度，靠前后补的空行把自己和邻居分开
+      const atPos = prev?.to ?? next?.from ?? source.length;
+      const 前空行 = atPos > 0 ? "\n\n" : "";
+      const 后空行 = atPos === 0 && source.length > 0 ? "\n\n" : "";
+      patches.push({ from: atPos, to: atPos, md: 前空行 + run + 后空行 });
       return;
     }
 
-    // 纯插入：区间取零长度，靠前后补的空行把自己和邻居分开
-    const prev = oldK[oStart - 1];
-    const next = oldK[oStart];
-    const atPos = prev?.to ?? next?.from ?? source.length;
-    const md = prev ? "\n\n" + serializeRun(newRun) : serializeRun(newRun) + "\n\n";
-    patches.push({ from: atPos, to: atPos, md });
+    /*
+     * 有旧块被替换 / 删除。
+     *
+     * 142：**边界只认「自己有源区间」的旧块**。无源块（粘贴进来的、142 补在末尾的那一行）
+     * 在原文里占的字节我们指不出来，把邻居的边界当成它的边界就会**连邻居之间的空行一起替换掉**，
+     * 而序列化器不会补那个空行（101 的口径：块区间不含前后空行）。
+     * 实测症状：在末尾补出来的那一行打字，写出来是 `| 采油 | 12 |补一句` ——
+     * 段落粘在表格最后一行上，整张表当场读坏。
+     *
+     * 而且**往外退要退到最近一个有源区间的邻居，不能只看紧挨着的那一个**：
+     * 连着两块粘贴进来的块（或一块粘贴 + 末尾补的那行）都改过时，`prev.to` 与 `next.from` 也是 null。
+     * 旧代码在这里直接兜到 0 或 `source.length`，等于把「区间外那些没原文的块」连它们的字节
+     * 一起换掉 —— 那是**丢块**，比粘住更糟。所以：
+     * 左边界退到 L 之后，`L 与区域之间的那些无源块` 必须重新序列化写回（它们没被改，
+     * 内容就是上一次由我们写进去的那串字节，再序列化一次是幂等的）；右边界同理。
+     */
+    let from = first?.from ?? null;
+    let to = last?.to ?? null;
+    const 补前空行 = from == null;
+    let 补后空行 = false;
+
+    let 前置: Kid[] = [];
+    let 后置: Kid[] = [];
+    if (from == null) {
+      let p = oStart - 1;
+      while (p >= 0 && oldK[p].to == null) p--;
+      from = p >= 0 ? (oldK[p].to as number) : 0;
+      前置 = oldK.slice(p + 1, oStart); // 这一段全是无源块：文本里有字节，但指不出区间
+    }
+    if (to == null) {
+      let q = oEnd;
+      while (q < oldK.length && oldK[q].from == null) q++;
+      if (q < oldK.length) {
+        to = oldK[q].from as number;
+        补后空行 = true; // 区间右端停在**下一块开头**，中间那段空行被吃进来了，要补回去
+        后置 = oldK.slice(oEnd, q);
+      } else {
+        // 一直到文件末尾：把末尾的空白留在区间外 ——
+        // 「文件以换行结尾」这件事不是她改的，不该被这次替换顺手改掉。
+        // 这条路上**不补后空行**：区间右端已经贴着最后一块的文字，补了就多两行空白。
+        let t = source.length;
+        while (t > from && /\s/.test(source[t - 1])) t--;
+        to = t;
+        后置 = oldK.slice(oEnd);
+      }
+    }
+    // 纯删除时顺手吃掉后随的空行，别在文档里留一串无意义空白
+    if (newRun.length === 0 && next?.from != null) to = next.from;
+
+    const 段 = [前置.length ? serializeRun(前置) : "", run, 后置.length ? serializeRun(后置) : ""].filter(
+      (s) => s !== ""
+    );
+    let md = 段.join("\n\n");
+    if (补前空行 && from > 0) md = "\n\n" + md;
+    if (补后空行 && md !== "") md = md + "\n\n";
+    patches.push({ from, to, md });
   };
 
   for (const [ao, an] of anchors) {

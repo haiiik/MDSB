@@ -5,7 +5,7 @@ import {
   wrappingInputRule,
 } from "prosemirror-inputrules";
 import { Fragment } from "prosemirror-model";
-import type { Plugin } from "prosemirror-state";
+import { PluginKey, type EditorState, type Plugin, type Transaction } from "prosemirror-state";
 import { hpSchema } from "./schema";
 
 /**
@@ -25,15 +25,38 @@ import { hpSchema } from "./schema";
 const n = hpSchema.nodes;
 
 /**
- * 给规则打开「行内代码里不触发」这道闸。
+ * 给规则打开「行内代码里不触发」这道闸，并**盖一个记账**。
  *
- * 插件的默认值是 `inCodeMark: true`（`index.cjs:19` 的 `!== false`），
+ * 闸：插件的默认值是 `inCodeMark: true`（`index.cjs:19` 的 `!== false`），
  * 含义是**不检查**行内代码 —— 于是在 `` `#` `` 这种行内代码里打空格，
  * 整段会被规则变成标题，代码段跟着没了。对编辑器这是净伤害，逐条关掉。
  * （`inCode` 默认 false，即 code 节点里本来就不触发，那条正是 113 要的「围栏里不触发」。）
+ *
+ * 记账（142）：`undoInputRule` 靠插件自己那份 state 里的「刚触发过哪条规则」工作，
+ * 而插件的 `state.apply` 写的是「**任何**带 docChanged 的事务都把这份暂存清掉」。
+ * 142 的 `documentShapePlugin` 会在「末尾不是段落」时追加一笔补行事务，
+ * 于是「打 `# ` 变标题 → 立刻退格撤回」这条链被它拦腰截断（实测：撤回后那行连 `#` 都没了，
+ * 退格变成了普通的合并块）。所以规则事务上盖一个只有我们自己认得的 meta，
+ * 形状插件看到这个就这一轮什么都不做 —— **不猜语义、也不抢同一笔事务**。
  */
+export const INPUT_RULE_META = new PluginKey("hp-input-rule");
+
+/** InputRule 的 handler 在 .d.ts 里标的是 `@internal`、没露成字段；运行时它是普通自有属性，这里窄化一次 */
+type 规则处理器 = (
+  state: EditorState,
+  match: RegExpMatchArray,
+  start: number,
+  end: number
+) => Transaction | null;
+
 function guarded<T extends InputRule>(rule: T): T {
   rule.inCodeMark = false;
+  const 可写 = rule as unknown as { handler: 规则处理器 };
+  const 原处理器 = 可写.handler.bind(rule);
+  可写.handler = (state, match, start, end) => {
+    const tr = 原处理器(state, match, start, end);
+    return tr ? tr.setMeta(INPUT_RULE_META, true) : null;
+  };
   return rule;
 }
 

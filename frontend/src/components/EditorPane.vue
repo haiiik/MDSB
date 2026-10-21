@@ -408,7 +408,7 @@ watch(edit, (el) => {
   if (!el) return;
   attachEditScroll();
   restoreScroll("edit");
-  focusUntitledDoc();
+  focusEmptyDoc();
 });
 
 /**
@@ -417,14 +417,18 @@ watch(edit, (el) => {
  * 之前点「+」之后焦点还留在按钮上，工具栏显示着「正文」但文档里没有光标，
  * 而空白处又点不进去（见 EditView 那条样式注释）—— 用户就只能干看着。
  * EditView 是异步组件，刚切过去时 ref 还是 null，所以按帧重试；
- * 只在「未命名 + 一个字没写过 + 编辑档」这三个条件同时成立时才抢焦点，
- * 别的场合（打开已有文档、切标签、切模式）一律不动用户现有的焦点与位置。
+ * 只在「一个字没写过 + 编辑档」这两个条件同时成立时才抢焦点，
+ * 别的场合（打开有字的文档、切标签、切模式）一律不动用户现有的焦点与位置。
+ *
+ * 142 把条件里的「未命名」去掉了：**打开一篇空文件是同一条路径**。
+ * 桌面与浏览器实测都一样 —— 底栏那颗「编辑」按钮点完焦点还在按钮上，
+ * 空档里第一个字打不出去，而她接着按 Enter / Tab 会**把模式按钮再点一次**（模式当场跳走）。
  */
-function focusUntitledDoc(tries = 12): void {
+function focusEmptyDoc(tries = 12): void {
   const t = activeTab.value;
-  if (!t || t.path || t.markdown !== "" || t.mode !== "edit") return;
+  if (!t || t.markdown !== "" || t.mode !== "edit") return;
   if (edit.value?.focusStart()) return;
-  if (tries > 0) requestAnimationFrame(() => focusUntitledDoc(tries - 1));
+  if (tries > 0) requestAnimationFrame(() => focusEmptyDoc(tries - 1));
 }
 
 /**
@@ -435,7 +439,7 @@ function focusUntitledDoc(tries = 12): void {
 watch(
   () => activeTab.value?.id,
   () => {
-    focusUntitledDoc();
+    focusEmptyDoc();
     pending = null;
     // 关掉的标签不该继续占着几何与锚点：按现存的标签集合裁一次
     const 活着 = new Set(tabs.list.map((t) => t.id));

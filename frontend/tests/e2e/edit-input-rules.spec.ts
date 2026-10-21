@@ -156,8 +156,14 @@ test("退格能把刚转换的块类型撤回原样（输入规则自带的那�
 
   await page.keyboard.press("Backspace");
   await expect(page.locator(".ProseMirror h1")).toHaveCount(0);
-  const last = page.locator(".ProseMirror p").last();
-  await expect(last).toContainText("#");
+  /*
+   * 判据写的是「有一行普通段落、内容以 # 开头」，不是「最后一行是它」：
+   * 142 之后文档末尾可能留着一行空段落（守形状的那笔补行只在**真改了文档**的事务之后跑，
+   * 输入规则触发那一轮让开了，所以这里到底有没有那一行取决于前一步做了什么）。
+   */
+  const 撤回出来的一行 = page.locator(".ProseMirror p").filter({ hasText: "#" });
+  await expect(撤回出来的一行).toHaveCount(1);
+  await expect(撤回出来的一行.first()).toContainText("#");
 
   // 撤回后那行是「以 # 开头的普通段落」，落盘必须转义，否则重开就变回标题了
   await page.keyboard.press("Control+s");
