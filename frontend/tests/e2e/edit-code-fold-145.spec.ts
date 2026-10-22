@@ -106,11 +106,14 @@ test("普通代码块不收、不给按钮（她的口径：源码是它唯一�
   const s = await 量块(page, SQL);
   expect(s.折, "30 行的 sql 块被收起来了 —— 她明确说代码块不收").toBe(false);
   expect(s.钮).toBe(null);
-  // 反向对照：同一篇里的 Mermaid 块要收
+  // 反向对照：同一篇里的 Mermaid 块要收，而且是**整段收走**（她：隐藏的再彻底一点）
   const m = await 量块(page, 图);
   expect(m.折, "Mermaid 的源码没跟着收起").toBe(true);
+  expect(m.高, "收起后源码还占着高度（她要的是整段不显示，点了才展开）").toBe(0);
   expect(m.钮, "收起状态下没有「编辑源码」入口").toBe("编辑源码");
 });
+
+
 
 test("公式块：多行源码也收起（排版结果就是它的另一种展示）", async ({ page }) => {
   await 打开(page);
@@ -149,12 +152,18 @@ test("点「编辑源码」：源码显示出来、滚动条定位到那块源�
   expect(await 读盘(page, path)).toContain("%% 打的字 flowchart TD");
 });
 
-test("收起时点露出来的那几行：光标进得来、块当场展开", async ({ page }) => {
+test("光标用方向键走进收起的源码：块当场展开（收起 ≠ 进不去）", async ({ page }) => {
   await 打开(page);
   expect((await 量块(page, 式)).折).toBe(true);
-  await page.locator(式 + " > pre").click({ position: { x: 30, y: 6 } });
-  await page.waitForTimeout(200);
-  expect((await 量块(page, 式)).折, "点在收起的公式源码上却没展开，等于看不见自己打的字").toBe(false);
+  // 源码整段收起后没有可点的地方（146-B），剩下的自然手势是从上面那段按 ↓ 走进来
+  await page.locator(".ProseMirror p").first().click();
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press("ArrowDown");
+    if ((await 量块(page, 式)).折 === false) break;
+  }
+  const s = await 量块(page, 式);
+  expect(s.折, "方向键走进了收起的源码却没展开 = 看不见自己打的字").toBe(false);
+  expect(s.高, "展开了却没高度").toBeGreaterThan(0);
 });
 
 test("展开之后不自己收回去；光标离开才给「收起」，点了收得回去", async ({ page }) => {
@@ -179,6 +188,17 @@ test("折叠不改字节：收起状态直接保存，落盘内容与不折叠�
   expect((await 量块(page, 式)).折).toBe(true);
   await page.keyboard.press("Control+s");
   expect(await 读盘(page, path)).toBe(文档);
+});
+
+test("一行的图源码也整段收起（不再有「太短就不收」的门槛）", async ({ page }) => {
+  const 短文 = ["# 一图", "", "```mermaid", "graph TD", "```", "", "正文。", ""].join("\n");
+  const path = await 打开(page, 短文);
+  const s = await 量块(page, 图);
+  expect(s.折).toBe(true);
+  expect(s.高, "两行源码也该整段藏起来").toBe(0);
+  expect(s.钮).toBe("编辑源码");
+  await page.keyboard.press("Control+s");
+  expect(await 读盘(page, path)).toBe(短文);
 });
 
 test("语言从 sql 改成 mermaid：这块跟着收起 —— 折叠判据是现读的，不靠重建视图", async ({ page }) => {

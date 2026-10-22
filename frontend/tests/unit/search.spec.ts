@@ -3,6 +3,7 @@ import { mdastToDoc } from "../../src/kernel/pm/mdastToDoc";
 import { docTextOf } from "../../src/kernel/pm/searchHighlight";
 import {
   advance,
+  advanceNear,
   findMatches,
   formatCount,
   InvalidPatternError,
@@ -113,6 +114,46 @@ describe("跳转与计数", () => {
     expect(formatCount(12, 2)).toBe("3 / 12");
     expect(formatCount(0, -1)).toBe("0 / 0");
   });
+
+  /**
+   * 146：她「查找使用中，编辑导致丢掉了当前目标，点上下箭头时自动定位上下位置，不要回到首个」。
+   * 索引在丢目标之后不代表任何位置，起点必须是**光标在文本里的偏移**。
+   */
+  describe("146：按光标位置推进（advanceNear）", () => {
+    const 三处 = [
+      { from: 5, to: 8 },
+      { from: 40, to: 43 },
+      { from: 90, to: 93 },
+    ];
+
+    it("站在第二处里按 ↓ → 第三处（不是回到第一处）", () => {
+      expect(advanceNear(三处, 41, 1)).toBe(2);
+    });
+
+    it("站在第二处里按 ↑ → 第一处", () => {
+      expect(advanceNear(三处, 41, -1)).toBe(0);
+    });
+
+    it("光标正落在某一处的起点上：按 ↑ 回上一处而不是原地不动（原地不动像按钮坏了）", () => {
+      expect(advanceNear(三处, 40, -1)).toBe(0);
+      expect(advanceNear(三处, 40, 1)).toBe(2);
+    });
+
+    it("后面没有就循环回第一处，前面没有就绕到最后一处", () => {
+      expect(advanceNear(三处, 95, 1)).toBe(0);
+      expect(advanceNear(三处, 3, -1)).toBe(2);
+    });
+
+    it("没有光标可言的档（阅读模式给 null）退回索引推进的老语义", () => {
+      expect(advanceNear(三处, null, 1)).toBe(0);
+      expect(advanceNear(三处, null, -1)).toBe(2);
+    });
+
+    it("没有命中时是 -1，不越界", () => {
+      expect(advanceNear([], 10, 1)).toBe(-1);
+      expect(advanceNear([], null, -1)).toBe(-1);
+    });
+  });
 });
 
 describe("编辑模式的「字符偏移 ↔ PM 位置」映射（docTextOf）", () => {
@@ -143,4 +184,5 @@ describe("编辑模式的「字符偏移 ↔ PM 位置」映射（docTextOf）",
     const positions = offsets.map(posAt);
     for (let i = 1; i < positions.length; i++) expect(positions[i]).toBeGreaterThanOrEqual(positions[i - 1]);
   });
+
 });

@@ -117,6 +117,34 @@ export function advance(total: number, current: number, delta: 1 | -1): number {
   return ((base + delta) % total + total) % total;
 }
 
+/**
+ * 146：**按「人现在站在哪儿」推进**，而不是按上一次的索引加一。
+ *
+ * 她的报告：查找用着的时候改了几个字，当前那一处被改没了，
+ * 再点 ↑ / ↓ 就跳回**第一处** —— 明明站在第七处附近，视图却甩到文件开头。
+ * 索引在这种情况下已经不代表任何位置（命中列表刚被重算过），
+ * 而**光标在文本里的偏移**仍然代表她人在哪儿，所以拿它当起点：
+ * - `delta > 0` → 起点之后第一处；后面没有就回到第一处（循环）；
+ * - `delta < 0` → 起点之前最后一处；前面没有就落到最后一处（循环）。
+ * 起点用 `to <= 起点` 判上一个，是为了让「光标正落在当前这一处里面」时按 ↑ 回到**上一处**，
+ * 而不是原地不动（原地不动看起来像按钮坏了）。
+ *
+ * `起点 === null`（这一档没有光标可言，例如阅读模式）时退回索引推进的老语义：
+ * 正向给第一处、反向给最后一处。
+ */
+export function advanceNear(matches: Match[], 起点: number | null, delta: 1 | -1): number {
+  const total = matches.length;
+  if (!total) return -1;
+  if (起点 === null) return advance(total, -1, delta);
+  if (delta > 0) {
+    const i = matches.findIndex((m) => m.from > 起点);
+    return i >= 0 ? i : 0;
+  }
+  for (let i = total - 1; i >= 0; i--) if (matches[i].to <= 起点) return i;
+  return total - 1;
+}
+
+
 /** 计数文案：`3 / 12`；没有命中时是 `0 / 0`，不写「无结果」让 UI 自己决定 */
 export function formatCount(total: number, current: number): string {
   if (total === 0) return "0 / 0";

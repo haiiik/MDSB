@@ -298,3 +298,235 @@ for (const mode of ["read", "edit", "source"] as const) {
     await expect(page.getByTestId("search-count")).toHaveText("2 / 5");
   });
 }
+
+/* ---------------------------------------------------------------------------
+ * 146：她两条一起提的 ——「替换功能增加结果反馈」+
+ * 「查找使用中，编辑导致丢掉了当前目标，点上下箭头时自动定位上下位置，不要回到首个」。
+ * ------------------------------------------------------------------------ */
+
+/** 展开替换行并把替换内容填进去 */
+async function 填替换(page: Page, 内容: string) {
+  await page.getByTestId("search-toggle-replace").click();
+  await page.getByTestId("replace-input").fill(内容);
+}
+
+test("146-C：替换一处 / 替换全部都给回执（换了几处、还剩几处）", async ({ page }) => {
+  await seedAndOpen(page, "edit");
+  await page.keyboard.press("Control+f");
+  await type(page, "指标");
+  await 填替换(page, "KPI");
+
+  await page.getByTestId("replace-one").click();
+  await expect(page.getByTestId("search-feedback")).toHaveText("已替换 1 处，还剩 4 处");
+
+  await page.getByTestId("replace-all").click();
+  await expect(page.getByTestId("search-feedback")).toHaveText("已替换 4 处，还剩 0 处");
+  // 换完的字节确实落得下去（回执不是嘴上说说）：回写要按 Ctrl+S，替换本身不自动落盘
+  await page.keyboard.press("Control+s");
+  await page.waitForTimeout(900);
+  expect(await savedOf(page)).not.toContain("指标");
+});
+
+
+test("146-C：换了查询词，上一笔回执要作废（挂着会以为说的是这一笔）", async ({ page }) => {
+  await seedAndOpen(page, "edit");
+  await page.keyboard.press("Control+f");
+  await type(page, "指标");
+  await 填替换(page, "KPI");
+  await page.getByTestId("replace-one").click();
+  await expect(page.getByTestId("search-feedback")).toHaveText("已替换 1 处，还剩 4 处");
+  await page.getByTestId("search-input").fill("末段");
+  await expect(page.getByTestId("search-feedback")).toHaveCount(0);
+});
+
+test("146-D：编辑把当前那一处换掉了，按 ↑ 回到**光标前面**那一处，不是绕到最后一个", async ({ page }) => {
+  await seedAndOpen(page, "edit");
+  await page.keyboard.press("Control+f");
+  await type(page, "指标");
+  // 走到第 3 处（表头那一格），然后就地把它换成不含关键词的文字
+  await page.getByTestId("search-next").click();
+  await page.getByTestId("search-next").click();
+  await expect(page.getByTestId("search-count")).toHaveText("3 / 5");
+  await 填替换(page, "KPI");
+  await page.getByTestId("replace-one").click();
+  /*
+   * 老行为：重算把当前项复位成**第一处** → "1 / 4"，接着按 ↑ 就绕到最后一个 "4 / 4"
+   * —— 她看到的正是"我明明在表格里，怎么甩回文件另一头"。
+   * 新行为：重算按**身份**（同一串文字 + 离原位最近）把它认回原地 → "3 / 4"，
+   * 于是 ↑ 回到它前面那一处 "2 / 4"、↓ 走到它后面那一处，跳的始终是"上下位置"。
+   */
+  await expect(page.getByTestId("search-count")).toHaveText("3 / 4");
+  await page.getByTestId("search-prev").click();
+  await expect(page.getByTestId("search-count")).toHaveText("2 / 4");
+  await page.getByTestId("search-next").click();
+  await page.getByTestId("search-next").click();
+  await expect(page.getByTestId("search-count")).toHaveText("4 / 4");
+});
+
+test("146-D：后面没有命中时按 ↓ 才循环回第一处（循环语义没被改掉）", async ({ page }) => {  await seedAndOpen(page, "edit");
+  await page.keyboard.press("Control+f");
+  await type(page, "指标");
+  for (let i = 1; i < 5; i++) await page.getByTestId("search-next").click();
+  await expect(page.getByTestId("search-count")).toHaveText("5 / 5");
+  await 填替换(page, "KPI");
+  await page.getByTestId("replace-one").click();
+  // 被换掉的是**最后一处**：认回来的最近一处仍是最后一处（现在共 4 处）→ "4 / 4"
+  await expect(page.getByTestId("search-count")).toHaveText("4 / 4");
+  // 它后面确实没有命中了 → ↓ 才循环回第一处（循环语义没被这条改动弄坏）
+  await page.getByTestId("search-next").click();
+  await expect(page.getByTestId("search-count")).toHaveText("1 / 4");
+});
+
+/* ---------------------------------------------------------------------------
+ * 146-E：她「查找功能查找后，切换模式时，显示位置发生变化了」。
+ * 140 那条管的是"没开查找时换档落在同一段"；开着查找时**当前那一处**才是她站着的地方，
+ * 换档必须还停在那一处附近，而不是被"视口顶端那一段"或比例换算带走。
+ * ------------------------------------------------------------------------ */
+
+const 跨模式文 = [
+  "# 查找跨模式",
+  "",
+  ...Array.from({ length: 60 }, (_, i) => [
+    i === 39 ? "第 40 段里有一个 关键词 在这里。" : `第 ${i + 1} 段正文。`,
+    "",
+  ]).flat(),
+  "",
+].join("\n");
+
+/** 视口顶端那一段的段号（三档都数得出来：阅读/编辑看块，源码看行） */
+const 顶端段 = (page: Page, 条目: string, 容器: string) =>
+  page
+    .evaluate(([itemSel, boxSel]) => {
+      const box = document.querySelector<HTMLElement>(boxSel);
+      if (!box) return -99;
+      const 线 = box.getBoundingClientRect().top + 24;
+      for (const el of Array.from(document.querySelectorAll(itemSel))) {
+        if ((el as HTMLElement).getBoundingClientRect().bottom <= 线) continue;
+        const m = (el.textContent ?? "").match(/第 ([0-9]+) 段/);
+        if (m) return Number(m[1]);
+      }
+      return -2;
+    }, [条目, 容器])
+    .catch(() => -98);
+
+/**
+ * 当前那一处命中现在在不在视口里（她真正在意的就是这个蓝框还看得见）。
+ * 编辑 / 源码档的当前项是**真 DOM 元素**（PM 与 CM 的 decoration）；
+ * 阅读档走 CSS Custom Highlight API，**没有元素可查**，只能问 Highlight 里那条 Range。
+ */
+const 当前在视口 = (page: Page, sel: string, 容器选择器: string) =>
+  page
+    .evaluate(([命中选择器, 容器]) => {
+      const 容 = document.querySelector(容器)?.getBoundingClientRect();
+      if (!容) return null;
+      const el = document.querySelector(命中选择器);
+      let r = el?.getBoundingClientRect();
+      if (!r) {
+        const 高亮 = CSS.highlights.get("hp-search-current");
+        const 第一条 = 高亮 ? Array.from(高亮)[0] : undefined;
+        if (!第一条) return null;
+        r = 第一条.getBoundingClientRect();
+      }
+      return r.top >= 容.top - 2 && r.bottom <= 容.bottom + 2;
+    }, [sel, 容器选择器] as [string, string])
+    .catch(() => null);
+
+for (const [起点档, 起点条目, 起点容器, 目标档, 目标条目, 目标容器] of [  ["read", ".hp-doc > *", ".pane__scroller", "edit", ".ProseMirror > *", ".edit-pane__scroll"],
+  ["edit", ".ProseMirror > *", ".edit-pane__scroll", "read", ".hp-doc > *", ".pane__scroller"],
+  ["edit", ".ProseMirror > *", ".edit-pane__scroll", "source", ".cm-line", ".cm-scroller"],
+] as const) {
+  test(`146-E：${起点档} 档查到第 40 段后切到 ${目标档} 档，还停在那一处`, async ({ page }) => {
+    path = "/demo/查找跨模式-" + 起点档 + "-" + 目标档 + ".md";
+    await freshSession(page);
+    await gotoApp(page);
+    await page.evaluate(
+      ([p, c]) => {
+        (window as unknown as { __hpMockSeedFile?: (a: string, b: string) => void }).__hpMockSeedFile!(p, c);
+        (window as unknown as { __hpMockPickPath?: string }).__hpMockPickPath = p;
+      },
+      [path, 跨模式文]
+    );
+    await page.getByTestId("tab-open").click();
+    await expect(page.getByTestId("document-root")).toBeVisible();
+    if (起点档 !== "read") await setMode(page, 起点档);
+    await page.waitForTimeout(500);
+
+    await page.keyboard.press("Control+f");
+    await page.getByTestId("search-input").fill("关键词");
+    await expect(page.getByTestId("search-count")).toHaveText("1 / 1");
+    // 打字只画高亮不跳转（140 为输入法定的口径），要跳得按 Enter
+    await page.getByTestId("search-input").press("Enter");
+    await page.waitForTimeout(600);
+
+    const 前 = await 顶端段(page, 起点条目, 起点容器);
+    // 跳过去之后当前项是**居中**落的（scrollIntoView 的语义），顶端不必正好是第 40 段；
+    // 这条只确认"确实跳到下面来了"，真正的判据是下面那两条（顶端没跑远 + 那一处还在视口里）
+    expect(前, `起点档 ${起点档} 压根没往下跳（顶端还在第 ${前} 段）`).toBeGreaterThanOrEqual(30);
+    expect(await 当前在视口(page, ".hp-search--current", 起点容器)).toBeTruthy();
+
+    await setMode(page, 目标档);
+    await page.waitForTimeout(900);
+    const 后 = await 顶端段(page, 目标条目, 目标容器);
+    /*
+     * 顶端段号只当"没跑回文件开头"的下限看，不当逐段对齐的判据：
+     * 源码档一个段落要占两行（段落之间那行空行也在），同样一个 scrollTop 天然少看到约 1/4 的段数，
+     * 硬要求 ±1 段量的其实是行高，不是"她还停在那一处"。真正的判据是下面那条。
+     */
+    expect(后, `换档后视口顶端掉回第 ${后} 段（起点是第 ${前} 段）`).toBeGreaterThanOrEqual(前 - 16);
+    expect(
+      await 当前在视口(page, ".hp-search--current", 目标容器),
+      `换到 ${目标档} 档之后，那一处命中已经不在视口里了`
+    ).toBeTruthy();
+  });
+}
+
+/**
+ * 146-E 的**判别性**判据：换档那一刻会注册新适配器 → 重算命中。
+ * 老实现把当前项复位成第一处，于是她看到的是"切一下模式，蓝框跑到别处去了"；
+ * 现在按身份（同一串文字 + 离原位最近）认回原地，计数与蓝框都该停在第 3 处。
+ */
+const 三处文 = [
+  "# 三处对照",
+  "",
+  "第 1 处 关键词 在这里。",
+  "",
+  ...Array.from({ length: 20 }, (_, i) => [`铺垫第 ${i + 1} 行正文。`, ""]).flat(),
+  "第 2 处 关键词 在这里。",
+  "",
+  ...Array.from({ length: 20 }, (_, i) => [`再铺垫第 ${i + 1} 行正文。`, ""]).flat(),
+  "第 3 处 关键词 在这里。",
+  "",
+].join("\n");
+
+test("146-E：换档之后当前项还是同一处（计数不从 1 重新开始）", async ({ page }) => {
+  path = "/demo/查找换档三处.md";
+  await freshSession(page);
+  await gotoApp(page);
+  await page.evaluate(
+    ([p, c]) => {
+      (window as unknown as { __hpMockSeedFile?: (a: string, b: string) => void }).__hpMockSeedFile!(p, c);
+      (window as unknown as { __hpMockPickPath?: string }).__hpMockPickPath = p;
+    },
+    [path, 三处文]
+  );
+  await page.getByTestId("tab-open").click();
+  await expect(page.getByTestId("document-root")).toBeVisible();
+  await setMode(page, "edit");
+  await page.waitForTimeout(400);
+  await page.keyboard.press("Control+f");
+  await page.getByTestId("search-input").fill("关键词");
+  await expect(page.getByTestId("search-count")).toHaveText("1 / 3");
+  await page.getByTestId("search-input").press("Enter");
+  await page.getByTestId("search-input").press("Enter");
+  await expect(page.getByTestId("search-count")).toHaveText("3 / 3");
+
+  for (const 档 of ["read", "source", "edit"] as const) {
+    await setMode(page, 档);
+    await page.waitForTimeout(700);
+    expect(await page.getByTestId("search-count").innerText(), `切到 ${档} 档之后`).toBe("3 / 3");
+    expect(
+      await 当前在视口(page, ".hp-search--current", 档 === "read" ? ".pane__scroller" : 档 === "edit" ? ".edit-pane__scroll" : ".cm-scroller"),
+      `切到 ${档} 档之后那一处已经看不见了`
+    ).toBeTruthy();
+  }
+});

@@ -184,6 +184,17 @@ function scheduleSecondFrame(tabId: string, mode: Mode): void {
 function restoreScroll(mode: Mode) {
   const tab = activeTab.value;
   if (!tab) return;
+  /*
+   * 146：查找条开着且有当前项时，**位置由那一处说了算**。
+   * 换档那一刻新适配器注册会自己把当前项滚进视野（`apply(..., reveal=true)`），
+   * 这时再按「视口顶端那一段」的锚点落一次，就把她正看着的那一带推出了视野 ——
+   * 她的原话：「查找功能查找后，切换模式时，显示位置发生变化了」。
+   * 140 那套锚点管的是"没开查找时换档落在同一段"，两件事不冲突：查找条一关就恢复走锚点。
+   */
+  if (searchState.open && searchState.current >= 0 && scrollerOf(mode)) {
+    lastMode.set(tab.id, mode);
+    return;
+  }
   const from = lastMode.get(tab.id);
   const el = scrollerOf(mode);
   let v = tab.scroll[mode];

@@ -25,6 +25,15 @@ async function seedAndOpen(page: Page, doc: string) {
   await page.getByTestId("tab-open").click();
   await expect(page.getByTestId("document-root")).toBeVisible();
   await setMode(page, "edit");
+  await page.waitForSelector(".hp-codebox");
+  /*
+   * 145 之后 Mermaid 的源码**默认整段收起**（她：「隐藏的再彻底一点，点了编辑源码再展开」），
+   * 而这一份用例钉的是 110 那件事 ——「点开即改、原地重绘」，前提是源码看得见点得进。
+   * 所以这里先把源码展开（收起与展开本身由 `edit-code-fold-145.spec.ts` 那 8 条管，不重复）。
+   */
+  const 展开键 = page.locator('[data-testid="pm-code-fold"]');
+  if (await 展开键.count()) await 展开键.first().click();
+  await page.waitForTimeout(150);
 }
 
 const preview = (page: Page) => page.getByTestId("pm-mermaid-preview");
@@ -36,7 +45,7 @@ async function savedOf(page: Page): Promise<string> {
   );
 }
 
-test("编辑模式把 Mermaid 渲成图，源码同屏可改", async ({ page }) => {
+test("编辑模式把 Mermaid 渲成图，点开源码可改（145 后源码默认收起）", async ({ page }) => {
   await seedAndOpen(page, GOOD);
 
   await expect(preview(page)).toBeVisible();
@@ -45,7 +54,7 @@ test("编辑模式把 Mermaid 渲成图，源码同屏可改", async ({ page }) 
   // 节点文字来自图本身，不是源码字符串
   await expect(preview(page).locator("svg")).toContainText("单据受理");
   await expect(preview(page).locator("svg")).toContainText("形式审查");
-  // 源码区仍在（原地可改，不是跳走）
+  // 源码区点开就在原地（不是跳去别处、也不是换个只读框）
   await expect(page.locator(".hp-codebox > pre")).toBeVisible();
 });
 

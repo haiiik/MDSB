@@ -1,12 +1,14 @@
 import { reactive, shallowRef } from "vue";
 import {
   advance,
+  advanceNear,
   DEFAULT_SEARCH_OPTIONS,
   findMatches,
   InvalidPatternError,
   type Match,
   type SearchOptions,
 } from "../kernel/search";
+import { tf } from "../i18n";
 
 /**
  * 118：查找与替换的**共享状态**。
@@ -53,6 +55,12 @@ export const search = reactive({
   error: "",
   /** 替换区是否展开（Ctrl+H 才展开，Ctrl+F 只看） */
   withReplace: false,
+  /**
+   * 146：替换的**回执**（她：「替换功能增加结果反馈」）。
+   * 换完不留一句「换了几处、还剩几处」，用户只能自己数高亮 —— 点了像没反应，
+   * 而"没反应"在替换这种不可见批量动作上是最糟的观感。
+   */
+  feedback: "",
 });
 
 /**
@@ -68,6 +76,16 @@ export const search = reactive({
  * 所以它放在 `SearchBar` 里，模板每次渲染都求值一遍。
  */
 const adapterRef = shallowRef<SearchAdapter | null>(null);
+
+/**
+ * 146：当前项的**身份** —— 匹配到的那段文字 + 当时在文本里的位置。
+ *
+ * 为什么要存这个：`search.current` 是**这一次命中列表里的下标**，
+ * 正文一改（甚至只是在它前面多打一个字），列表重算，下标就不再代表她站着的那一处；
+ * 重算又把 current 复位成 0，于是「按 ↓ 回到首个附近」—— 她的报告正是这一条。
+ * 文字 + 位置才是跨重算仍然认得出的东西。
+ */
+let 当前身份: { text: string; from: number } | null = null;
 
 export function registerSearchAdapter(next: SearchAdapter | null): void {
   adapterRef.value = next;
@@ -102,8 +120,10 @@ export function recomputeSearch(reveal = true): void {
     search.current = -1;
     return;
   }
+  let 正文 = "";
   try {
-    search.matches = findMatches(adapter.text(), search.query, search.options);
+    正文 = adapter.text();
+    search.matches = findMatches(正文, search.query, search.options);
     search.error = "";
   } catch (e) {
     if (e instanceof InvalidPatternError) {
@@ -114,13 +134,45 @@ export function recomputeSearch(reveal = true): void {
       throw e;
     }
   }
-  search.current = search.matches.length ? 0 : -1;
+  search.current = 找回当前项(正文);
+  记身份(正文);
   adapter.apply(search.matches, search.current, reveal);
+}
+
+/**
+ * 146：重算之后把「当前项」找回来。
+ * 认的是**同一串文字里离原位最近的那一处**：在她前面补一个字，位置整体平移，
+ * 但最近的那一处还是她刚才看的那一处；这一处真被改没了（文字不再出现）才给 -1，
+ * 意思是「当前没落在任何一处」—— 计数条会显示 `0 / N`，上下箭头从丢的位置接着找邻居。
+ */
+function 找回当前项(正文: string): number {
+  if (!search.matches.length) return -1;
+  const 身份 = 当前身份;
+  if (!身份) return 0;
+  let 最好 = -1;
+  let 最近 = Infinity;
+  search.matches.forEach((m, i) => {
+    if (正文.slice(m.from, m.to) !== 身份.text) return;
+    const 差 = Math.abs(m.from - 身份.from);
+    if (差 < 最近) {
+      最近 = 差;
+      最好 = i;
+    }
+  });
+  return 最好;
+}
+
+/** 找到了就更新身份；没找到**留着旧身份**（那是上下箭头唯一还认得的落点） */
+function 记身份(正文: string): void {
+  const m = search.matches[search.current];
+  if (m) 当前身份 = { text: 正文.slice(m.from, m.to), from: m.from };
 }
 
 /** 查找框打字走这条：`reveal=false`，输入法组合期不会被选区抢走 */
 export function setSearchQuery(q: string, reveal = false): void {
   search.query = q;
+  当前身份 = null; // 换查询词 = 换目标，旧身份不再作数（第一处重新开始）
+  search.feedback = ""; // 换了查询词，上一笔回执就作废（还挂着会以为说的是这一笔）
   recomputeSearch(reveal);
 }
 
@@ -138,13 +190,27 @@ export function recomputeIfOpen(): void {
 
 export function setSearchOptions(patch: Partial<SearchOptions>): void {
   search.options = { ...search.options, ...patch };
+  当前身份 = null;
+  search.feedback = "";
   recomputeSearch();
 }
 
 export function gotoMatch(delta: 1 | -1): void {
   const adapter = adapterRef.value;
   if (!adapter || !search.matches.length) return;
-  search.current = advance(search.matches.length, search.current, delta);
+  /*
+   * 146：当前项还在（重算认出来了）就按索引推进 —— 这是原来那条被验收钉死的循环语义
+   * （末项点下一个回首项），不能动。
+   * 认不出来（`current < 0`，她刚把那一处改没了）才按**位置**找邻居：
+   * 起点是丢掉的那一处的位置，正向取它之后第一处、反向取它之前最后一处。
+   * 她的原话：「编辑导致丢掉了当前目标，点上下箭头时自动定位上下位置，不要回到首个」。
+   */
+  search.current =
+    search.current >= 0
+      ? advance(search.matches.length, search.current, delta)
+      : advanceNear(search.matches, 当前身份 ? 当前身份.from : null, delta);
+  const 正文 = adapter.text();
+  记身份(正文);
   // 点了「上一个 / 下一个」或按 Enter 才跳转：这条**要** reveal（把当前项滚进视野并落成选区）
   adapter.apply(search.matches, search.current, true);
 }
@@ -167,17 +233,25 @@ export function toggleReplace(): void {
 export function closeSearch(): void {
   search.open = false;
   search.error = "";
+  search.feedback = "";
   const adapter = adapterRef.value;
   adapter?.apply([], -1, false); // Esc 关闭并清高亮（验收明写）
   adapter?.focus?.();
 }
+
+/** 146：替换回执的文案（`done` 换了几处、`left` 还剩几处） */
+const 回执 = (done: number, left: number): string => tf("search.replaced", { done, left });
 
 /** 替换当前项并前进到下一项；返回是否真的替换了 */
 export function replaceCurrent(): boolean {
   const adapter = adapterRef.value;
   if (!adapter?.replaceOne || !search.matches.length || search.current < 0) return false;
   const ok = adapter.replaceOne(search.replacement);
-  if (ok) recomputeSearch();
+  if (ok) {
+    recomputeSearch();
+    // 剩几处只能重算之后才知道：替换写进去的文字本身可能又含查询词（`aa`→`aaa` 那种）
+    search.feedback = 回执(1, search.matches.length);
+  }
   return ok;
 }
 
@@ -185,6 +259,9 @@ export function replaceAllMatches(): number {
   const adapter = adapterRef.value;
   if (!adapter?.replaceAll) return 0;
   const n = adapter.replaceAll(search.replacement);
-  if (n) recomputeSearch();
+  if (n) {
+    recomputeSearch();
+    search.feedback = 回执(n, search.matches.length);
+  }
   return n;
 }

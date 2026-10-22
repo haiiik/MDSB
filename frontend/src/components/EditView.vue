@@ -273,7 +273,14 @@ function editorProps(state: EditorState): DirectEditorProps {
       // 必须传下去 —— 自己拿 posAtDOM 猜偏移会打到隔壁节点上。
       // theme 用 getter 传，让 Mermaid 重绘跟着当前深浅档走（D3），而不是建视图时定死。
       code_block: (node, editorView, getPos) =>
-        codeBlockNodeView(editorView, node, getPos as () => number | undefined, () => props.theme),
+        codeBlockNodeView(
+          editorView,
+          node,
+          getPos as () => number | undefined,
+          () => props.theme,
+          // 146-A：每张图的缩放倍率按「标签页 + 源区间」存，换档回来还是她调过的那一档
+          () => props.tabId ?? "",
+        ),
       // 138-B：块级公式「上面排版、下面改源码」，与 code_block 同一套路（防抖 + 去重 + 降级）
       math_block: (node, editorView, getPos) =>
         mathBlockNodeView(editorView, node, getPos as () => number | undefined),

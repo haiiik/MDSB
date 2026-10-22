@@ -210,6 +210,11 @@ watch(
       </button>
     </div>
 
+    <!--
+      146：替换回执（她：「替换功能增加结果反馈」）。
+      与正则报错那条各占一行、各有各的 testid —— 合并成一条会把"没匹配到"和"表达式写坏了"混成一谈。
+    -->
+    <p v-if="search.feedback" class="searchbar__hint" data-testid="search-feedback">{{ search.feedback }}</p>
     <p v-if="search.error" class="searchbar__error" data-testid="search-error">{{ search.error }}</p>
   </div>
 </template>
@@ -281,6 +286,14 @@ watch(
   margin: 0;
   padding-left: 2px;
   color: var(--hp-error);
+  font-size: 12px;
+}
+
+/* 146：替换回执是"做成了"的陈述，不是报错，所以用弱色不用红 */
+.searchbar__hint {
+  margin: 0;
+  padding-left: 2px;
+  color: var(--hp-text-weak);
   font-size: 12px;
 }
 </style>

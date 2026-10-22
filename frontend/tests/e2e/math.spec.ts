@@ -164,8 +164,9 @@ test("编辑模式改完保存：只有动过的那一处变化，其余逐字�
   await waitHydrated(page);
   await setMode(page, "edit");
   const src = page.getByTestId("pm-math-src");
-  await src.click();
-  await page.keyboard.press("End");
+  // 145 之后公式源码默认整段收起：点不到，也**不该**去点 —— 用 Range 直接把光标放进末尾，
+  // 光标一进块，块当场展开（这条正是那套收起规则要保住的路径）
+  await placeCaret(page, '[data-testid="pm-math-src"]', -1);
   await page.keyboard.type(" \\beta");
   await page.keyboard.press("Control+s");
   await expect(page.getByTestId("tab-dirty")).toHaveCount(0);

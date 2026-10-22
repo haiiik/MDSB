@@ -581,24 +581,30 @@
 }
 
 /*
- * 145：编辑档里**「源码 + 另有渲染产物」那两类块**（Mermaid、块级公式）默认收起源码，只露前 3 行。
+ * 145：编辑档里**「源码 + 另有渲染产物」那两类块**（Mermaid、块级公式）默认**整段收起源码**
+ * （她 10-22：「隐藏的再彻底一点，点了编辑源码再展开」）。
  * 她 2026-10-22 把口径钉死：「代码块不收，收的是既展示源码又通过其他方式展示的内容」——
  * 所以这条只管 `data-mermaid="1"` 的代码块与 `.hp-mathblock`，普通代码块摊开显示、不给按钮。
- * 高度算法：`pre code` 是 0.88em × 1.6 行高 = 每行 1.408em（相对 pre 自己的 15px），
- * 加上 NodeView 那份 `padding: 10px 12px` 的上下 20px。
- * 只裁可视高度，**不动 DOM 里的一个字** —— 折叠不该影响落盘内容，保真口径优先。
+ * 只裁可视高度、内边距一并归零，**不动 DOM 里的一个字** —— 折叠不该影响落盘内容，保真口径优先。
+ * 也不用 `display: none`：那块 `pre` 里挂着 PM 的 `contentDOM`，从渲染树里整个摘掉会让
+ * 光标无处可放（143 那条「改 CSS 也能把编辑弄坏」的同族）。
  */
 .hp-doc .hp-codebox[data-mermaid="1"][data-folded="1"] > pre {
-  max-height: calc(3 * 1.408em + 20px);
+  /* 整段藏起来：max-height 0 + 上下内边距归零。**不用 display:none** —— 里面有 PM 的 contentDOM */
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
   overflow: hidden;
-  mask-image: linear-gradient(to bottom, #000 62%, transparent);
 }
 
 /* 公式块的源码区：`font-size: .92em` × `line-height: 1.75`，上下 padding 各 4px */
 .hp-doc .hp-mathblock[data-folded="1"] > .hp-mathblock__src {
-  max-height: calc(3 * 1.75em + 8px);
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+  border-top: 0;
   overflow: hidden;
-  mask-image: linear-gradient(to bottom, #000 62%, transparent);
 }
 
 .hp-doc .hp-codebox__fold {
@@ -616,6 +622,37 @@
 .hp-doc .hp-codebox__fold:hover {
   color: var(--hp-accent);
   border-color: var(--hp-accent);
+}
+
+/* 146-A：这一张图自己的缩放（只作用在渲染出来的那张图上，不进文档） */
+.hp-doc .hp-codebox__zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+}
+
+.hp-doc .hp-codebox__zoom button {
+  min-width: 22px;
+  padding: 1px 5px;
+  border: 1px solid var(--hp-border);
+  border-radius: 3px;
+  background: var(--hp-bg);
+  color: var(--hp-text-weak);
+  font-size: 0.78em;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.hp-doc .hp-codebox__zoom button:hover:not(:disabled) {
+  color: var(--hp-accent);
+  border-color: var(--hp-accent);
+}
+
+/* 到顶/到底那一侧的键不给摆着点不动（她的口径：不可用的选项干脆不摆） */
+.hp-doc .hp-codebox__zoom button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 

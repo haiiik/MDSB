@@ -19,16 +19,19 @@ import type { ThemeName } from "../render";
 const MERMAID_DEBOUNCE_MS = 250;
 
 /**
- * 145：编辑档里**「源码 + 另有渲染产物」那种块**默认收起源码，只露前 3 行。
+ * 145：编辑档里**「源码 + 另有渲染产物」那种块**默认收起源码。
  *
- * 她 2026-10-22 把口径钉死了（我第一版理解反了）：
+ * 她 2026-10-22 两句把口径钉死（我第一版理解反了）：
  * > 代码块不收，收的是既展示源码又通过其他方式展示的内容
- * 所以参与折叠的只有 **Mermaid 块**（图就是它的另一种展示）和**块级公式**（排版结果是另一种展示）；
+ * > 编辑模式源码隐藏的再彻底一点，点了编辑源码再展开
+ * 所以参与折叠的只有 **Mermaid 块**（图就是它的另一种展示）和**块级公式**（排版结果是另一种展示），
+ * 而「收起」= **整段源码不显示**，要源码就点「编辑源码」。
  * 普通代码块摊开显示、不给按钮 —— 源码是它唯一的内容，收起来等于把代码藏了。
  *
- * 阈值取 3 行：一行两行的源码本来就占不了几行，收它只是多一次点击。
+ * **收起不能用 `display: none`**：那块 `pre` 里挂着 PM 的 `contentDOM`，
+ * 子树整个从渲染树里摘掉之后，PM 的坐标与光标无处可放
+ * （143「改 CSS 也能把编辑功能弄坏」的同族）。走 `max-height: 0` + 内边距归零：盒子还在，只是高 0。
  */
-const EDIT_FOLD_LINES = 3;
 
 /**
  * 在册代码块的折叠重算函数（145）。
@@ -151,9 +154,20 @@ function 挂折叠(a: {
   return { 重算, 销毁: () => 折叠重算.delete(重算) };
 }
 
-/** 145：源码超过 3 行才值得收（一行的图源码收起来只是多一次点击） */
+/**
+ * 146-A：**每张 Mermaid 图自己的缩放倍率**。
+ *
+ * 她要的是"这一张图放大一点"，不是整篇文档的缩放（025 那颗管的是后者）。
+ * 倍率**不进文档**：它是视图属性，写进 .md 就是污染原文（保真口径）。
+ * 键 = 标签页 + 该块的源区间，所以换模式、换标签回来还是她调过的那一档；
+ * 没有源区间的块（刚粘贴进来的）不认，从 100% 起。
+ */
+const 图缩放 = new Map<string, number>();
+const 缩放档 = [0.3, 0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+
+/** 145：有源码可看才收（空源码那块没东西可藏，别摆一颗点不动的键） */
 function 源码可折(n: PMNode): boolean {
-  return n.textContent !== "" && n.textContent.split("\n").length > EDIT_FOLD_LINES;
+  return n.textContent !== "";
 }
 
 /** 预览区上面那行提示（125 起把「双击改字」也写进去，功能要看得见） */
@@ -464,7 +478,9 @@ export function codeBlockNodeView(
   view: EditorView,
   node: PMNode,
   getPos: () => number | undefined,
-  theme: () => ThemeName = () => "light"
+  theme: () => ThemeName = () => "light",
+  /** 146-A：缩放倍率存在哪张表里（按标签页分开，不同文件之间不串） */
+  tabKey: () => string = () => ""
 ): NodeView {
   const box = document.createElement("div");
   box.className = "hp-codebox";
@@ -877,6 +893,82 @@ export function codeBlockNodeView(
     getPos,
   });
 
+  /* ---------------- 146-A：这一张图自己的缩放 ---------------- */
+  /*
+   * 她：「mermaid 图新增支持单独缩放，缩放功能放编辑功能右侧」。
+   * 三颗键：`−` 倍率 `+`，点倍率回 100%。只作用在**渲染出来的那张图**上，
+   * 倍率存在视图侧的表里（键 = 标签页 + 该块源区间），**一个字节都不进文档** ——
+   * 缩放是"怎么看"，不是"文档里有什么"。
+   */
+  const 缩放组 = document.createElement("span");
+  缩放组.className = "hp-codebox__zoom";
+  缩放组.dataset.testid = "pm-mermaid-zoom";
+  const 缩小 = document.createElement("button");
+  缩小.type = "button";
+  const 倍率 = document.createElement("button");
+  倍率.type = "button";
+  倍率.dataset.testid = "pm-mermaid-zoom-reset";
+  const 放大 = document.createElement("button");
+  放大.type = "button";
+  for (const [b, 文, 键] of [
+    [缩小, "−", "code.zoomOut"],
+    [放大, "+", "code.zoomIn"],
+  ] as const) {
+    b.textContent = 文;
+    b.dataset.testid = 键 === "code.zoomIn" ? "pm-mermaid-zoom-in" : "pm-mermaid-zoom-out";
+    b.title = t(键);
+  }
+  倍率.title = t("code.zoomReset");
+  缩放组.append(缩小, 倍率, 放大);
+  bar.append(缩放组);
+
+  /** 当前倍率存在哪一格：没有源区间的块（刚粘贴进来的）不认，从 100% 起 */
+  const 缩放键 = (): string => {
+    const pos = getPos();
+    const n = pos == null ? null : view.state.doc.nodeAt(pos);
+    const 起 = n ? (n.attrs.srcFrom ?? null) : null;
+    const 止 = n ? (n.attrs.srcTo ?? null) : null;
+    return 起 == null ? "" : tabKey() + ":" + 起 + "-" + 止;
+  };
+  let 倍 = 1;
+
+  function 画缩放(): void {
+    缩放组.hidden = current(当前节点) !== "mermaid";
+    previewSvg.style.zoom = String(倍);
+    倍率.textContent = Math.round(倍 * 100) + "%";
+    缩小.disabled = 倍 <= 缩放档[0];
+    放大.disabled = 倍 >= 缩放档[缩放档.length - 1];
+  }
+
+  /** 往某一侧走一档：跳过表里没有的值，取最近的那一档 */
+  function 调倍率(delta: 1 | -1): void {
+    const 目标 =
+      delta > 0
+        ? 缩放档.find((v) => v > 倍 + 1e-6)
+        : [...缩放档].reverse().find((v) => v < 倍 - 1e-6);
+    if (!目标 || 目标 === 倍) return;
+    倍 = 目标;
+    const k = 缩放键();
+    if (k) 图缩放.set(k, 倍);
+    画缩放();
+  }
+
+  缩小.addEventListener("click", (e) => {
+    e.preventDefault();
+    调倍率(-1);
+  });
+  放大.addEventListener("click", (e) => {
+    e.preventDefault();
+    调倍率(1);
+  });
+  倍率.addEventListener("click", (e) => {
+    e.preventDefault();
+    倍 = 1;
+    const k = 缩放键();
+    if (k) 图缩放.set(k, 1);
+    画缩放();
+  });
+
 
   function sync(n: PMNode) {
     当前节点 = n;
@@ -895,6 +987,10 @@ export function codeBlockNodeView(
       select.value = lang;
     }
     box.dataset.mermaid = lang === "mermaid" ? "1" : "0";
+    // 146-A：换档 / 换标签回来时认回这张图自己的倍率（键认不到就回 100%）
+    const k = 缩放键();
+    倍 = k && 图缩放.has(k) ? (图缩放.get(k) as number) : 1;
+    画缩放();
     scheduleRender(n);
     // 内容变了（她删了几行、或从 30 行粘成 2 行）→ 折叠状态与按钮要跟着重判
     折叠.重算(view.state);
