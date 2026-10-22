@@ -233,6 +233,7 @@ const en: Record<MsgKey, string> = {
   // 139：JS 直接写进 DOM 的那批（见 zh.ts 同名分节）
   "code.expand": "Show all {n} lines",
   "code.collapse": "Collapse",
+  "code.editSource": "Edit source",
   "code.copy": "Copy",
   "code.copied": "Copied",
   "code.copyFailed": "Copy failed",

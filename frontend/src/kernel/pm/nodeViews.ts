@@ -1,6 +1,6 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { EditorView, NodeView } from "prosemirror-view";
-import { TextSelection } from "prosemirror-state";
+import { Plugin, TextSelection, type EditorState } from "prosemirror-state";
 import { t, tf } from "../../i18n";
 import { paintMath } from "../math";
 import { renderMermaid } from "../mermaid";
@@ -17,6 +17,38 @@ import type { ThemeName } from "../render";
 
 /** 110：每次按键都渲一次 Mermaid 会明显卡；250ms 足够让人觉得「改一行图就变了」 */
 const MERMAID_DEBOUNCE_MS = 250;
+
+/**
+ * 145：编辑档的围栏代码块**默认收起**，只露前 3 行。
+ *
+ * 与阅读档那条 20 行折叠不是一条口径，也不该是：阅读档要的是「长代码别刷屏」，
+ * 编辑档要的是「正文之间一眼看得见这儿有块代码」。阈值取 3 = 「露出块的样子但占不到视线」，
+ * 三行以内的块本来就占不了几行，收起反而多一次点击，所以不折。
+ */
+const EDIT_FOLD_LINES = 3;
+
+/**
+ * 在册代码块的折叠重算函数（145）。
+ *
+ * 为什么要有这张表：`NodeView` 上没有「选区变了」的回调 ——
+ * `update()` 只在**这个节点的内容/属性变了**时才被调，光标走进一个没变过的代码块，
+ * 视图这里一次都不会被叫到。而「光标进块就必须展开」正是这条功能唯一真正的陷阱
+ * （光标落在一个被 clipping 掉的 `pre` 里打字 = 看不见自己打的什么）。
+ * 所以由 `codeFoldWatchPlugin` 在每次状态更新时集体问一遍。
+ */
+const 折叠重算 = new Set<(state: EditorState) => void>();
+
+/** 145：选区一变就通知所有在册代码块重算折叠状态；挂在编辑模式的插件列表里 */
+export function codeFoldWatchPlugin(): Plugin {
+  return new Plugin({
+    view: () => ({
+      update: (v) => {
+        // 快照再遍历：重算里可能销毁/新建视图，直接遍历 Set 会被自己改坏
+        for (const f of Array.from(折叠重算)) f(v.state);
+      },
+    }),
+  });
+}
 
 /** 预览区上面那行提示（125 起把「双击改字」也写进去，功能要看得见） */
 /** 139：改成函数 —— 模块级常量等于在 import 那一刻就把语言烘死了，切成 English 也不会变 */
@@ -351,7 +383,14 @@ export function codeBlockNodeView(
   const hint = document.createElement("span");
   hint.className = "hp-codebox__hint";
 
-  bar.append(select, hint);
+  /** 145：「编辑源码 / 收起」这一颗就贴在工具条右端（与阅读档那颗折叠键同一侧） */
+  const fold = document.createElement("button");
+  fold.type = "button";
+  fold.className = "hp-codebox__fold";
+  fold.dataset.testid = "pm-code-fold";
+  fold.hidden = true;
+
+  bar.append(select, hint, fold);
 
   const pre = document.createElement("pre");
   // 保留 102 那两个属性：tabs-modes.spec.ts 靠它们断言代码块渲染出来了
@@ -719,7 +758,83 @@ export function codeBlockNodeView(
     sel?.addRange(r);
   });
 
+  /* ---------------- 145：编辑档源码默认收起 ---------------- */
+
+  /** 她点过「编辑源码」= 这块在她手里是展开的，之后不再自动收回去 */
+  let 用户展开 = false;
+  /** `update()` 之后要跟着的当前节点（`node` 是建视图时那份，改过语言/内容就是旧的） */
+  let 当前节点 = node;
+
+  const 行数 = (n: PMNode) => (n.textContent === "" ? 0 : n.textContent.split("\n").length);
+  const 可折 = () => 行数(当前节点) > EDIT_FOLD_LINES && 当前节点.textContent !== "";
+
+  /**
+   * 光标（或整块的选中）是否落在这块代码的区间里。
+   * 用「选区与节点区间有任何重叠」判，不用 `$from.parent === 节点`：
+   * NodeSelection 选中整块时 `from === pos`、`parent` 是文档根，那条判据会漏掉它，
+   * 于是「整块被选中着、源码却收着」。
+   */
+  function 光标在块内(state: EditorState): boolean {
+    const pos = getPos();
+    if (pos == null) return false;
+    const n = state.doc.nodeAt(pos);
+    if (!n) return false;
+    return state.selection.from < pos + n.nodeSize && state.selection.to > pos;
+  }
+
+  function 重算(state: EditorState): void {
+    const 收 = 可折() && !用户展开 && !光标在块内(state);
+    box.dataset.folded = 收 ? "1" : "0";
+    /*
+     * 按钮三态，缺一个都会挡路：
+     * - 收着 → 「编辑源码」（她要的入口）；
+     * - 她点开过、光标已经出去了 → 「收起」（总得能再收回去）；
+     * - 光标还在块里 → **不给按钮**：正在打字时把源码收走 = 把纸从她手底下抽掉，
+     *   收起之后光标落在一个 clipping 掉的 `pre` 里，屏幕上看不见自己打的字。
+     */
+    if (!可折() || (!收 && 光标在块内(state))) {
+      fold.hidden = true;
+      return;
+    }
+    fold.hidden = false;
+    fold.textContent = 收 ? t("code.editSource") : t("code.collapse");
+    fold.title = 收 ? t("code.editSource") : t("code.collapse");
+  }
+
+  fold.addEventListener("click", (e) => {
+    e.preventDefault();
+    const pos = getPos();
+    if (pos == null) return;
+    if (box.dataset.folded === "1") {
+      用户展开 = true;
+      重算(view.state);
+      /*
+       * 「点击后显示源码并把滚动条定位到源码位置」= 光标进源码开头 + `scrollIntoView`。
+       * 顺序要紧：**先展开再派发**。收起时 `pre` 被 max-height 裁掉，
+       * 先派发的话 PM 量到的还是收起后的框，滚过去的位置差着一大截。
+       */
+      view.dispatch(
+        view.state.tr.setSelection(TextSelection.create(view.state.doc, pos + 1)).scrollIntoView()
+      );
+      /*
+       * PM 的 `scrollIntoView` 只保证**光标那一寸**在视口里（最小滚动），
+       * 实测：工具条卡在视口下沿时点这颗键，PM 一格都没滚，源码整段还在屏幕外 ——
+       * 而她的原话是「点击后显示源码**并把滚动条定位到源码位置**」。
+       * 所以补一次「把整块源码滚进来」：`block: "nearest"` 的语义正好是
+       * 「放得下就整块放进视口，放不下就把顶边对齐视口上沿」，不会把已经在看的块硬甩到最上面。
+       */
+      pre.scrollIntoView({ block: "nearest" });
+      view.focus();
+      return;
+    }
+    用户展开 = false;
+    重算(view.state);
+  });
+
+  折叠重算.add(重算);
+
   function sync(n: PMNode) {
+    当前节点 = n;
     const lang = current(n);
     // 未知语言（如 `klingon`）不在候选里：保留原值并显式提示，而不是悄悄丢掉标注
     const known = CODE_LANGS.some((l) => l.value === lang);
@@ -736,6 +851,8 @@ export function codeBlockNodeView(
     }
     box.dataset.mermaid = lang === "mermaid" ? "1" : "0";
     scheduleRender(n);
+    // 内容变了（她删了几行、或从 30 行粘成 2 行）→ 折叠状态与按钮要跟着重判
+    重算(view.state);
   }
 
   select.addEventListener("change", () => {
@@ -754,9 +871,17 @@ export function codeBlockNodeView(
   return {
     dom: box,
     contentDOM: code,
-    // 预览区里 Mermaid 注入的 SVG 不是 PM 的内容，DOM 变更与事件都不能交给 PM，
-    // 否则 PM 会试图把它同步回文档模型（表现为图一闪即消或整块被清空）。
-    ignoreMutation: (m) => bar.contains(m.target as Node) || preview.contains(m.target as Node),
+    /*
+     * 只有**内容区**（`code`）里的变更才是 PM 的事，其余一律不许它管。
+     *
+     * 145 踩出来的：折叠状态写在 `box` 自己的 `data-folded` 上，
+     * 而旧写法只挡了 `bar` 与 `preview` 两棵子树 —— `box` 上的属性变更漏了出去，
+     * PM 的 DOMObserver 把它当成「有人从外面改了这个节点」→ 销毁重建 NodeView →
+     * 新视图建好又写一次 `data-folded`（新节点上这个属性本来不存在，是真变更）→ 再重建……
+     * **死循环，整个编辑模式当场卡住**（7 条用例全红在 `.hp-codebox` 等不到可见）。
+     * PM 自己应用 DOM 变更时会先 `observer.stop()`，所以这里放行内容区不会吞掉它自己的编辑。
+     */
+    ignoreMutation: (m) => !code.contains(m.target as Node),
     /**
      * 工具条（语言下拉）与 Mermaid 预览上的事件不交给 PM。
      *
@@ -777,6 +902,8 @@ export function codeBlockNodeView(
     },
     destroy: () => {
       if (renderTimer) clearTimeout(renderTimer);
+      // 145：视图没了就要从折叠名册里摘掉，否则插件每次选区变动都在给孤儿算状态
+      折叠重算.delete(重算);
       // 正在改字时切走模式（组件被卸载）：把 contenteditable 收掉，
       // 否则那张临时网口留在文档里，PM 的 DOM 与模型就对不上了
       if (editing) {

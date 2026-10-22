@@ -11,7 +11,7 @@ import "prosemirror-view/style/prosemirror.css";
 import { patch } from "../kernel/blockPatch";
 import { domTopAnchor, scrollDomToAnchor } from "../kernel/anchors";
 import { mdastToDoc } from "../kernel/pm/mdastToDoc";
-import { codeBlockNodeView, mathBlockNodeView } from "../kernel/pm/nodeViews";
+import { codeBlockNodeView, mathBlockNodeView, codeFoldWatchPlugin } from "../kernel/pm/nodeViews";
 import { hpInputRules } from "../kernel/pm/inputRules";
 import { HISTORY_GROUP_DELAY_MS, isTypingTransaction } from "../kernel/pm/history";
 import { richPastePlugin } from "../kernel/pm/pastePlugin";
@@ -251,6 +251,8 @@ function buildState(md: string) {
       footnoteJumpPlugin(),
       tableMenuPlugin(),
       keymap(baseKeymap),
+      // 145：选区一变就重算每个代码块的收起/展开（NodeView 自己没有「选区变了」的回调）
+      codeFoldWatchPlugin(),
       // 142：文档形状的两条不变式（末尾留一行能写字的 + 把 PM 自动填空掉出来的空占位块换回段落）。
       // 放在最后一项：它守的是「所有事务落定之后」的形状，前面的键位与粘贴各写各的。
       documentShapePlugin(),
@@ -581,6 +583,18 @@ defineExpose({
 
 .edit-pane :deep(.hp-doc) {
   padding-bottom: 0;
+}
+
+/*
+ * 144：`reading.css` 的 `.hp-doc > *:first-child { margin-top: 0 }` 在编辑档**没人命中**。
+ * 编辑档多一层挂载点（`.hp-doc > .hp-edit > .ProseMirror > 块`），
+ * 于是「首子元素」是 `.hp-edit` 这个不带外边距的 div，真正第一块的上边距没被抹掉。
+ * 实测（浏览器 mock）：以 `# 标题` 开头的文档，正文第一行阅读档 29px、编辑档 75px，
+ * 差的 46px 正好是 h1 的 `margin-top: 1.6em`（h1 字号 28.5px）。
+ * 段落 / 列表本身 margin-top 为 0，所以只有标题开头会露出来 —— 三种开头都写了用例。
+ */
+.edit-pane :deep(.hp-edit > .ProseMirror > *:first-child) {
+  margin-top: 0;
 }
 
 /*

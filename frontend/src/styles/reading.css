@@ -580,8 +580,37 @@
   overflow-x: auto;
 }
 
-/* 110：Mermaid 原地预览 + 源码同屏，改一行即重绘 */
-.hp-doc .hp-mermaidbox {
+/*
+ * 145：编辑档的围栏代码块**默认收起**，只露前 3 行（口径与理由见 `nodeViews.ts` 的 EDIT_FOLD_LINES）。
+ * 高度算法：`pre code` 是 0.88em × 1.6 行高 = 每行 1.408em（相对 pre 自己的 15px），
+ * 加上 NodeView 那份 `padding: 10px 12px` 的上下 20px。
+ * 只裁可视高度，**不动 DOM 里的一个字** —— 折叠不该影响落盘内容，保真口径优先。
+ */
+.hp-doc .hp-codebox[data-folded="1"] > pre {
+  max-height: calc(3 * 1.408em + 20px);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 62%, transparent);
+}
+
+.hp-doc .hp-codebox__fold {
+  /* 贴在工具条右端：与阅读档那颗折叠键同一侧，眼睛在同一个位置找得到同类动作 */
+  margin-left: auto;
+  padding: 1px 8px;
+  border: 1px solid var(--hp-border);
+  border-radius: 3px;
+  background: var(--hp-bg);
+  color: var(--hp-text-weak);
+  font-size: 0.78em;
+  cursor: pointer;
+}
+
+.hp-doc .hp-codebox__fold:hover {
+  color: var(--hp-accent);
+  border-color: var(--hp-accent);
+}
+
+
+/* 110：Mermaid 原地预览 + 源码同屏，改一行即重绘 */.hp-doc .hp-mermaidbox {
   /* 127：SVG 文字的覆盖输入框按 rect 差值定位，坐标系要有 */
   position: relative;
   padding: 10px 12px 0;

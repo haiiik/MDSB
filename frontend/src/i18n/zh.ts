@@ -180,6 +180,7 @@ const zh = {
   // 代码块工具条（020）
   "code.expand": "展开全部 {n} 行",
   "code.collapse": "收起",
+  "code.editSource": "编辑源码",
   "code.copy": "复制",
   "code.copied": "已复制",
   "code.copyFailed": "复制失败",

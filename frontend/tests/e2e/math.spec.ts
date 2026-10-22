@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { setMode } from "./mockApp";
+import { placeCaret, setMode } from "./mockApp";
 
 /**
  * 138-A：公式走**真链路** —— 渲染落占位，`hydrate()` 动态取 KaTeX 后原地替换。
@@ -108,8 +108,12 @@ test("编辑模式：块级公式上面排版、下面能改源码", async ({ pa
   // 改一个字 → 上面的预览跟着变。
   // **先等"变成了什么"（β 出现），再看状态**：打字之前 `data-state` 就已经是 `done`，
   // 拿它当起点判据会当场成立、读到旧渲染（桌面第 17 段就是这么假红的）。
-  await src.click();
-  await page.keyboard.press("End");
+  //
+  // 落点用 `placeCaret`（DOM Range 显式放进去），不用「点击 + End」：
+  // `End` 跳的是**点击所在那一行的行尾**，而且那一下点击产生的选区事务还没落地时键盘就发出去，
+  // 光标会留在原地（105/106 记过这条；本文件下面那条行内公式的用例也是为这个改成 Range 的）。
+  // 下面「把公式改坏」那条就栽过一次：字打进别的块，`data-state` 停在 `done`，看着像功能坏了。
+  await placeCaret(page, '[data-testid="pm-math-src"]', -1);
   await page.keyboard.type(" \\beta");
   await expect(preview).toContainText("β", { timeout: 20_000 });
   await expect(preview).toHaveAttribute("data-state", "done");
@@ -119,8 +123,8 @@ test("编辑模式：把公式改坏 → 退回原文 + 提示行报错，源码
   await waitHydrated(page);
   await setMode(page, "edit");
   const src = page.getByTestId("pm-math-src");
-  await src.click();
-  await page.keyboard.press("End");
+  // 落点同上：显式 Range 放到源码末尾，不靠「点击 + End」
+  await placeCaret(page, '[data-testid="pm-math-src"]', -1);
   await page.keyboard.type("\\typeout{x}");
   const preview = page.getByTestId("pm-math-block").getByTestId("pm-math-preview");
   await expect(preview).toHaveAttribute("data-state", "error", { timeout: 20_000 });
