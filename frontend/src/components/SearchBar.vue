@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from "../i18n";
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { formatCount } from "../kernel/search";
 import {
   closeSearch,
@@ -11,6 +11,7 @@ import {
   setSearchOptions,
   setSearchQuery,
   searchAdapter,
+  setCurrentAtPoint,
   toggleReplace,
 } from "../state/search";
 
@@ -121,13 +122,30 @@ function onReplaceKeydown(e: KeyboardEvent): void {
   }
 }
 
+/*
+ * 148：点正文里的高亮 → 计数跟着走到"第几处"。
+ * 监听挂在 document 上、只在查找条开着的那段时间存在：
+ * 三档的内容区在三个不同组件里，各挂一份迟早有一份忘记挂。
+ * 用捕获阶段，避免被 PM / CM 自己那套事件处理挡掉。
+ */
+function onDocClick(e: MouseEvent): void {
+  setCurrentAtPoint(e.clientX, e.clientY);
+}
+
 watch(
   () => search.open,
   (open) => {
-    if (open) focusInput();
+    if (open) {
+      focusInput();
+      document.addEventListener("click", onDocClick, true);
+    } else {
+      document.removeEventListener("click", onDocClick, true);
+    }
   },
   { immediate: true }
 );
+
+onBeforeUnmount(() => document.removeEventListener("click", onDocClick, true));
 
 watch(
   () => search.withReplace,

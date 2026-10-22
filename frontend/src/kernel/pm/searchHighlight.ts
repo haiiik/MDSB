@@ -126,6 +126,13 @@ export function makePmAdapter(view: EditorView): SearchAdapter {
   return {
     text: () => docTextOf(view.state.doc).text,
     canReplace: true,
+    // 148：屏幕上这一点落在第几处命中上
+    indexAtPoint: (x, y) => {
+      const at = view.posAtCoords({ left: x, top: y });
+      if (!at) return -1;
+      const { posAt } = docTextOf(view.state.doc);
+      return last.findIndex((m) => posAt(m.from) <= at.pos && at.pos < posAt(m.to));
+    },
     apply(matches, current, reveal) {
       last = matches;
       lastCurrent = current;

@@ -36,6 +36,12 @@ export type SearchAdapter = {
   apply(matches: Match[], current: number, reveal: boolean): void;
   /** 能不能替换（阅读模式只读 → false） */
   canReplace: boolean;
+  /**
+   * 148：屏幕上这一点落在**第几处命中**上（没有就返回 -1）。
+   * 三档的"点 → 偏移"各有各的算法（PM 的 posAtCoords、CM 的 posAtCoords、
+   * 阅读档只能拿 Highlight 的那些 Range 的矩形去撞），所以留给各适配器实现。
+   */
+  indexAtPoint?(x: number, y: number): number;
   /** 关闭查找条后把焦点还给正文（否则 Ctrl+Z 这类快捷键打在 body 上，用户以为撤销坏了） */
   focus?(): void;
   /** 替换当前项，返回是否发生替换 */
@@ -213,6 +219,24 @@ export function gotoMatch(delta: 1 | -1): void {
   记身份(正文);
   // 点了「上一个 / 下一个」或按 Enter 才跳转：这条**要** reveal（把当前项滚进视野并落成选区）
   adapter.apply(search.matches, search.current, true);
+}
+
+/**
+ * 148：她「查找功能，点击查找到的高亮块时，查找条中的 5 / 98，要定位到对应数字」。
+ *
+ * 点正文里某一处高亮 = 告诉她"我要看这一处"，可计数一直停在原来那一处（甚至因为
+ * 点击把光标挪走而在下一次重算时错位）。这里把点到的那一处认成当前项：
+ * **只改当前项与高亮，不 reveal** —— 她点在哪就站在哪，视图不该再跳。
+ */
+export function setCurrentAtPoint(x: number, y: number): boolean {
+  const adapter = adapterRef.value;
+  if (!adapter?.indexAtPoint || !search.open || !search.matches.length) return false;
+  const i = adapter.indexAtPoint(x, y);
+  if (i < 0 || i >= search.matches.length || i === search.current) return false;
+  search.current = i;
+  记身份(adapter.text());
+  adapter.apply(search.matches, i, false);
+  return true;
 }
 
 export function openSearch(withReplace = false): void {

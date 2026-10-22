@@ -581,15 +581,27 @@ function onWheel(e: WheelEvent) {
     </div>
 
     <!-- 阅读模式 -->
-    <div
-      v-else-if="activeTab.mode === 'read'"
-      ref="readScroller"
-      class="pane__scroller"
-      data-testid="read-mode"
-      @scroll="onReadScroll"
-    >
-      <div ref="documentRoot" data-testid="document-root" />
-    </div>
+    <template v-else-if="activeTab.mode === 'read'">
+      <!--
+        147（她：「阅读模式那个地方也应该有个栏，即使空着，也能让阅读模式和编辑模式的
+        初始高度一致」）：编辑档顶上那条工具栏占一行，阅读档以前没有这一行，
+        于是同一篇文档切个模式，正文整体上下跳一行（144 修的是块内上边距，这一行是容器偏移，两回事）。
+        这里补一条**同高但是空的**栏：盒模型（内边距 / 下框线 / 底色 / 字号）与编辑档那条
+        取自同一批 `:root` 变量，里面再放一个与工具栏按钮同尺寸的占位元素 ——
+        不是硬写一个 px 数，硬写的数在字号或内边距一改之后就会悄悄对不上，两档又开始跳。
+      -->
+      <div class="edit-toolbar edit-toolbar--ghost" aria-hidden="true" data-testid="read-toolbar-ghost">
+        <span class="edit-toolbar__sizer">&nbsp;</span>
+      </div>
+      <div
+        ref="readScroller"
+        class="pane__scroller"
+        data-testid="read-mode"
+        @scroll="onReadScroll"
+      >
+        <div ref="documentRoot" data-testid="document-root" />
+      </div>
+    </template>
 
     <!-- 源码模式（127：回写不再经这里 —— SourceView 按标签 id 直接写 store，见其注释） -->
     <div v-else-if="activeTab.mode === 'source'" class="pane__source" data-testid="source-mode">
@@ -701,6 +713,34 @@ function onWheel(e: WheelEvent) {
 .pane__error-close:hover {
   border-color: var(--hp-error-border);
   background: var(--hp-hover);
+}
+
+/*
+ * 147：阅读档那条"空栏"。盒模型与编辑档的 `.edit-toolbar` 逐项一致，
+ * 尺寸全部取自 :root 那批变量（两档同一份来源，改一处两边跟着走）。
+ * 里面的 `.edit-toolbar__sizer` 与工具栏按钮同一个盒子（同样的上下内边距 + 1px 透明边框 + 同一行高），
+ * 只是里面只有一个不换行的空格 —— **必须是真空格**：空的 `<span>` 没有行盒，
+ * 行高对它不起作用，那条栏会矮一截（实测差 16px，两档照样跳）。
+ * 这样两边的高度都由"字体 + 行高 + 内边距 + 边框"算出来，不是硬写一个 px 数。
+ */
+.edit-toolbar--ghost {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: var(--hp-toolbar-pad-y) var(--hp-toolbar-pad-x);
+  border-bottom: 1px solid var(--hp-border);
+  background: var(--hp-bg);
+  font-size: var(--hp-toolbar-font);
+  /* 与编辑档那条工具栏同一个行高来源（写在容器上，理由见 EditToolbar.vue 那条注释） */
+  line-height: var(--hp-toolbar-line);
+}
+
+.edit-toolbar__sizer {
+  min-width: 0;
+  padding: var(--hp-toolbar-btn-pad-y) var(--hp-toolbar-btn-pad-x);
+  border: 1px solid transparent;
+  border-radius: 4px;
 }
 
 .pane__scroller {

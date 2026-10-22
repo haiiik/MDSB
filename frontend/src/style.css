@@ -175,3 +175,20 @@ button:hover {
 ::highlight(hp-search-current) {
   background-color: var(--hp-search-current);
 }
+
+/*
+ * 147（她：「阅读模式那个地方也应该有个栏，即使空着，也能让阅读模式和编辑模式的初始高度一致」）：
+ * 编辑档顶上那条工具栏占一行，阅读档没有 —— 同一篇文档切个模式，正文整体上下跳一行。
+ * 这两处尺寸是**两档共用**的：工具栏本体与阅读档那条"空栏"都从这里取，
+ * 不在两处各写一遍数字（各写一遍 = 改字号/内边距之后悄悄对不上，两档又跳）。
+ */
+:root {
+  --hp-toolbar-pad-y: 6px;
+  --hp-toolbar-pad-x: 12px;
+  --hp-toolbar-font: 13px;
+  --hp-toolbar-btn-pad-y: 3px;
+  --hp-toolbar-btn-pad-x: 8px;
+  /* 按钮与占位元素**共用这一条行高**：不写死的话，空占位没有行盒，
+   * 那条空栏会比真工具栏矮十几像素（实测差 16px），两档还是跳。 */
+  --hp-toolbar-line: 16px;
+}

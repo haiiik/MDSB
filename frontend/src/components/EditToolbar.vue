@@ -238,10 +238,14 @@ function applyLink() {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  /* 147：这些尺寸走 :root 的变量，与阅读档那条空栏同一份来源 */
+  padding: var(--hp-toolbar-pad-y) var(--hp-toolbar-pad-x);
   border-bottom: 1px solid var(--hp-border);
   background: var(--hp-bg);
-  font-size: 13px;
+  font-size: var(--hp-toolbar-font);
+  /* 行高写在容器上：按钮那条 `font: inherit` 是简写，会把 line-height 一起重置成 normal，
+     写在按钮自己身上等于没写（实测空栏比真栏高 2px）。写在容器上，按钮与占位元素继承同一个值。 */
+  line-height: var(--hp-toolbar-line);
 }
 
 .edit-toolbar__group {
@@ -252,7 +256,7 @@ function applyLink() {
 
 .edit-toolbar__btn {
   min-width: 34px;
-  padding: 3px 8px;
+  padding: var(--hp-toolbar-btn-pad-y) var(--hp-toolbar-btn-pad-x);
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;

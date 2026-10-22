@@ -61,6 +61,13 @@ export function makeCmAdapter(getView: () => EditorView | null): SearchAdapter {
   return {
     text: () => getView()?.state.doc.toString() ?? "",
     canReplace: true,
+    // 148：CM 的坐标→文档偏移与命中同一套坐标系
+    indexAtPoint: (x, y) => {
+      const v = getView();
+      const pos = v ? v.posAtCoords({ x, y }) : null;
+      if (pos == null) return -1;
+      return last.findIndex((m) => m.from <= pos && pos < m.to);
+    },
     apply(matches, current, reveal) {
       last = matches;
       lastCurrent = current;

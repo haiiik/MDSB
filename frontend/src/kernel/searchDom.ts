@@ -46,6 +46,8 @@ function collect(root: HTMLElement): { text: string; runs: Run[] } {
 
 export function makeDomAdapter(root: () => HTMLElement | null, scroller: () => HTMLElement | null): SearchAdapter {
   let cached = { text: "", runs: [] as Run[] };
+  /** 148：上一次画出来的那些 Range（下标 = 第几处命中），点击命中判定要用它撞矩形 */
+  let 画的区间: Range[] = [];
   const refresh = () => {
     const el = root();
     cached = el ? collect(el) : { text: "", runs: [] };
@@ -67,15 +69,30 @@ export function makeDomAdapter(root: () => HTMLElement | null, scroller: () => H
       return cached.text;
     },
     canReplace: false, // 阅读模式只读
+    /*
+     * 148：阅读档的高亮是 CSS Custom Highlight 画的，**DOM 里没有元素可查**，
+     * 只能拿上一次那些 Range 的矩形去撞点中的位置。
+     */
+    indexAtPoint: (x, y) => {
+      for (let i = 0; i < 画的区间.length; i++) {
+        for (const r of Array.from(画的区间[i].getClientRects())) {
+          if (r.width <= 0) continue;
+          if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return i;
+        }
+      }
+      return -1;
+    },
     apply(matches, current, reveal) {
       refresh();
       clear();
+      画的区间 = [];
       if (!matches.length) return;
       const ranges: Range[] = [];
       for (const m of matches) {
         const r = rangeFor(cached.runs, m);
         if (r) ranges.push(r);
       }
+      画的区间 = ranges;
       if (supportsHighlightApi()) {
         CSS.highlights.set(HIGHLIGHT_ALL, new Highlight(...ranges.filter((_, i) => i !== current)));
         if (current >= 0 && ranges[current]) {
