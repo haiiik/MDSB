@@ -581,13 +581,22 @@
 }
 
 /*
- * 145：编辑档的围栏代码块**默认收起**，只露前 3 行（口径与理由见 `nodeViews.ts` 的 EDIT_FOLD_LINES）。
+ * 145：编辑档里**「源码 + 另有渲染产物」那两类块**（Mermaid、块级公式）默认收起源码，只露前 3 行。
+ * 她 2026-10-22 把口径钉死：「代码块不收，收的是既展示源码又通过其他方式展示的内容」——
+ * 所以这条只管 `data-mermaid="1"` 的代码块与 `.hp-mathblock`，普通代码块摊开显示、不给按钮。
  * 高度算法：`pre code` 是 0.88em × 1.6 行高 = 每行 1.408em（相对 pre 自己的 15px），
  * 加上 NodeView 那份 `padding: 10px 12px` 的上下 20px。
  * 只裁可视高度，**不动 DOM 里的一个字** —— 折叠不该影响落盘内容，保真口径优先。
  */
-.hp-doc .hp-codebox[data-folded="1"] > pre {
+.hp-doc .hp-codebox[data-mermaid="1"][data-folded="1"] > pre {
   max-height: calc(3 * 1.408em + 20px);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 62%, transparent);
+}
+
+/* 公式块的源码区：`font-size: .92em` × `line-height: 1.75`，上下 padding 各 4px */
+.hp-doc .hp-mathblock[data-folded="1"] > .hp-mathblock__src {
+  max-height: calc(3 * 1.75em + 8px);
   overflow: hidden;
   mask-image: linear-gradient(to bottom, #000 62%, transparent);
 }

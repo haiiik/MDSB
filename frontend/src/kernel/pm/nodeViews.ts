@@ -19,11 +19,14 @@ import type { ThemeName } from "../render";
 const MERMAID_DEBOUNCE_MS = 250;
 
 /**
- * 145：编辑档的围栏代码块**默认收起**，只露前 3 行。
+ * 145：编辑档里**「源码 + 另有渲染产物」那种块**默认收起源码，只露前 3 行。
  *
- * 与阅读档那条 20 行折叠不是一条口径，也不该是：阅读档要的是「长代码别刷屏」，
- * 编辑档要的是「正文之间一眼看得见这儿有块代码」。阈值取 3 = 「露出块的样子但占不到视线」，
- * 三行以内的块本来就占不了几行，收起反而多一次点击，所以不折。
+ * 她 2026-10-22 把口径钉死了（我第一版理解反了）：
+ * > 代码块不收，收的是既展示源码又通过其他方式展示的内容
+ * 所以参与折叠的只有 **Mermaid 块**（图就是它的另一种展示）和**块级公式**（排版结果是另一种展示）；
+ * 普通代码块摊开显示、不给按钮 —— 源码是它唯一的内容，收起来等于把代码藏了。
+ *
+ * 阈值取 3 行：一行两行的源码本来就占不了几行，收它只是多一次点击。
  */
 const EDIT_FOLD_LINES = 3;
 
@@ -31,14 +34,14 @@ const EDIT_FOLD_LINES = 3;
  * 在册代码块的折叠重算函数（145）。
  *
  * 为什么要有这张表：`NodeView` 上没有「选区变了」的回调 ——
- * `update()` 只在**这个节点的内容/属性变了**时才被调，光标走进一个没变过的代码块，
- * 视图这里一次都不会被叫到。而「光标进块就必须展开」正是这条功能唯一真正的陷阱
+ * `update()` 只在**这个节点的内容/属性变了**时才被调，光标走进一个没变过的块，
+ * 视图这里一次都不会被叫到。而「光标进块就必须展开」正是这条功能唯一的真陷阱
  * （光标落在一个被 clipping 掉的 `pre` 里打字 = 看不见自己打的什么）。
  * 所以由 `codeFoldWatchPlugin` 在每次状态更新时集体问一遍。
  */
 const 折叠重算 = new Set<(state: EditorState) => void>();
 
-/** 145：选区一变就通知所有在册代码块重算折叠状态；挂在编辑模式的插件列表里 */
+/** 145：选区一变就通知所有在册块重算折叠状态；挂在编辑模式的插件列表里 */
 export function codeFoldWatchPlugin(): Plugin {
   return new Plugin({
     view: () => ({
@@ -48,6 +51,109 @@ export function codeFoldWatchPlugin(): Plugin {
       },
     }),
   });
+}
+
+/**
+ * 145：把「收起 / 编辑源码 / 光标进块就展开」这套接到一个 NodeView 上。
+ *
+ * Mermaid 代码块与块级公式**共用这一份**：两边要守的规矩一条不差
+ * （光标在块里时不给「收起」、先展开再派发再滚、按钮三态），
+ * 抄两遍早晚改岔 —— 本项目已经吃过「预览与插入各拼一次」的同类亏。
+ */
+function 挂折叠(a: {
+  /** 写 `data-folded` 的外框 */
+  box: HTMLElement;
+  /** 工具条：按钮挂在它右端 */
+  bar: HTMLElement;
+  /** 被 max-height 裁掉的那块源码区 */
+  源区: HTMLElement;
+  /** 这块该不该参与折叠（由调用方按「有没有另一种展示」判） */
+  可折: () => boolean;
+  view: EditorView;
+  getPos: () => number | undefined;
+}): { 重算: (state: EditorState) => void; 销毁: () => void } {
+  const fold = document.createElement("button");
+  fold.type = "button";
+  fold.className = "hp-codebox__fold";
+  fold.dataset.testid = "pm-code-fold";
+  fold.hidden = true;
+  a.bar.append(fold);
+
+  /** 她点过「编辑源码」= 这块在她手里是展开的，之后不再自动收回去 */
+  let 用户展开 = false;
+
+  /**
+   * 光标（或整块的选中）是否落在这块的区间里。
+   * 用「选区与节点区间有任何重叠」判，不用 `$from.parent === 节点`：
+   * NodeSelection 选中整块时 `from === pos`、`parent` 是文档根，那条判据会漏掉它，
+   * 于是「整块被选中着、源码却收着」。
+   */
+  function 光标在块内(state: EditorState): boolean {
+    const pos = a.getPos();
+    if (pos == null) return false;
+    const n = state.doc.nodeAt(pos);
+    if (!n) return false;
+    return state.selection.from < pos + n.nodeSize && state.selection.to > pos;
+  }
+
+  function 重算(state: EditorState): void {
+    const 收 = a.可折() && !用户展开 && !光标在块内(state);
+    a.box.dataset.folded = 收 ? "1" : "0";
+    /*
+     * 按钮三态，缺一个都会挡路：
+     * - 收着 → 「编辑源码」（她要的入口）；
+     * - 她点开过、光标已经出去了 → 「收起」（总得能再收回去）；
+     * - 光标还在块里 / 这块本来就不该折 → **不给按钮**：
+     *   正在打字时把源码收走 = 把纸从她手底下抽掉。
+     */
+    if (!a.可折() || (!收 && 光标在块内(state))) {
+      fold.hidden = true;
+      return;
+    }
+    fold.hidden = false;
+    const 文 = 收 ? t("code.editSource") : t("code.collapse");
+    fold.textContent = 文;
+    fold.title = 文;
+  }
+
+  fold.addEventListener("click", (e) => {
+    e.preventDefault();
+    const pos = a.getPos();
+    if (pos == null) return;
+    if (a.box.dataset.folded === "1") {
+      用户展开 = true;
+      重算(a.view.state);
+      /*
+       * 「点击后显示源码并把滚动条定位到源码位置」= 光标进源码开头 + 滚过去。
+       * 顺序要紧：**先展开再派发**。收起时源码区被 max-height 裁着，
+       * 先派发的话 PM 量到的是收起后的框。
+       */
+      a.view.dispatch(
+        a.view.state.tr
+          .setSelection(TextSelection.create(a.view.state.doc, pos + 1))
+          .scrollIntoView()
+      );
+      /*
+       * PM 的 `scrollIntoView` 只保证**光标那一寸**在视口里，实测：工具条卡在视口下沿时点这颗键，
+       * `scrollTop` 一格没动，展开的源码整段还在屏幕外。她的原话是「显示源码**并把滚动条定位到
+       * 源码位置**」，所以补一次「把整块源码滚进来」：`nearest` = 放得下就整块进视口，
+       * 放不下就把顶边对齐视口上沿，不会把已经在看的块硬甩到最上面。
+       */
+      a.源区.scrollIntoView({ block: "nearest" });
+      a.view.focus();
+      return;
+    }
+    用户展开 = false;
+    重算(a.view.state);
+  });
+
+  折叠重算.add(重算);
+  return { 重算, 销毁: () => 折叠重算.delete(重算) };
+}
+
+/** 145：源码超过 3 行才值得收（一行的图源码收起来只是多一次点击） */
+function 源码可折(n: PMNode): boolean {
+  return n.textContent !== "" && n.textContent.split("\n").length > EDIT_FOLD_LINES;
 }
 
 /** 预览区上面那行提示（125 起把「双击改字」也写进去，功能要看得见） */
@@ -383,14 +489,7 @@ export function codeBlockNodeView(
   const hint = document.createElement("span");
   hint.className = "hp-codebox__hint";
 
-  /** 145：「编辑源码 / 收起」这一颗就贴在工具条右端（与阅读档那颗折叠键同一侧） */
-  const fold = document.createElement("button");
-  fold.type = "button";
-  fold.className = "hp-codebox__fold";
-  fold.dataset.testid = "pm-code-fold";
-  fold.hidden = true;
-
-  bar.append(select, hint, fold);
+  bar.append(select, hint);
 
   const pre = document.createElement("pre");
   // 保留 102 那两个属性：tabs-modes.spec.ts 靠它们断言代码块渲染出来了
@@ -758,80 +857,26 @@ export function codeBlockNodeView(
     sel?.addRange(r);
   });
 
-  /* ---------------- 145：编辑档源码默认收起 ---------------- */
+  /* ---------------- 145：Mermaid 块的源码默认收起（普通代码块不收） ---------------- */
 
-  /** 她点过「编辑源码」= 这块在她手里是展开的，之后不再自动收回去 */
-  let 用户展开 = false;
   /** `update()` 之后要跟着的当前节点（`node` 是建视图时那份，改过语言/内容就是旧的） */
   let 当前节点 = node;
 
-  const 行数 = (n: PMNode) => (n.textContent === "" ? 0 : n.textContent.split("\n").length);
-  const 可折 = () => 行数(当前节点) > EDIT_FOLD_LINES && 当前节点.textContent !== "";
-
-  /**
-   * 光标（或整块的选中）是否落在这块代码的区间里。
-   * 用「选区与节点区间有任何重叠」判，不用 `$from.parent === 节点`：
-   * NodeSelection 选中整块时 `from === pos`、`parent` 是文档根，那条判据会漏掉它，
-   * 于是「整块被选中着、源码却收着」。
-   */
-  function 光标在块内(state: EditorState): boolean {
-    const pos = getPos();
-    if (pos == null) return false;
-    const n = state.doc.nodeAt(pos);
-    if (!n) return false;
-    return state.selection.from < pos + n.nodeSize && state.selection.to > pos;
-  }
-
-  function 重算(state: EditorState): void {
-    const 收 = 可折() && !用户展开 && !光标在块内(state);
-    box.dataset.folded = 收 ? "1" : "0";
+  const 折叠 = 挂折叠({
+    box,
+    bar,
+    源区: pre,
     /*
-     * 按钮三态，缺一个都会挡路：
-     * - 收着 → 「编辑源码」（她要的入口）；
-     * - 她点开过、光标已经出去了 → 「收起」（总得能再收回去）；
-     * - 光标还在块里 → **不给按钮**：正在打字时把源码收走 = 把纸从她手底下抽掉，
-     *   收起之后光标落在一个 clipping 掉的 `pre` 里，屏幕上看不见自己打的字。
+     * 她 2026-10-22 把口径钉死：「代码块不收，收的是既展示源码又通过其他方式展示的内容」。
+     * 所以这里只认 `mermaid` —— 图就是它"另一种展示"，源码是次要的那一份。
+     * 语言从 `sql` 改成 `mermaid` 不会重建视图（110 为此把两种形态收在一个视图里），
+     * 所以这一句是**每次重算时现读**：改语言，收起/展开自己跟着变。
      */
-    if (!可折() || (!收 && 光标在块内(state))) {
-      fold.hidden = true;
-      return;
-    }
-    fold.hidden = false;
-    fold.textContent = 收 ? t("code.editSource") : t("code.collapse");
-    fold.title = 收 ? t("code.editSource") : t("code.collapse");
-  }
-
-  fold.addEventListener("click", (e) => {
-    e.preventDefault();
-    const pos = getPos();
-    if (pos == null) return;
-    if (box.dataset.folded === "1") {
-      用户展开 = true;
-      重算(view.state);
-      /*
-       * 「点击后显示源码并把滚动条定位到源码位置」= 光标进源码开头 + `scrollIntoView`。
-       * 顺序要紧：**先展开再派发**。收起时 `pre` 被 max-height 裁掉，
-       * 先派发的话 PM 量到的还是收起后的框，滚过去的位置差着一大截。
-       */
-      view.dispatch(
-        view.state.tr.setSelection(TextSelection.create(view.state.doc, pos + 1)).scrollIntoView()
-      );
-      /*
-       * PM 的 `scrollIntoView` 只保证**光标那一寸**在视口里（最小滚动），
-       * 实测：工具条卡在视口下沿时点这颗键，PM 一格都没滚，源码整段还在屏幕外 ——
-       * 而她的原话是「点击后显示源码**并把滚动条定位到源码位置**」。
-       * 所以补一次「把整块源码滚进来」：`block: "nearest"` 的语义正好是
-       * 「放得下就整块放进视口，放不下就把顶边对齐视口上沿」，不会把已经在看的块硬甩到最上面。
-       */
-      pre.scrollIntoView({ block: "nearest" });
-      view.focus();
-      return;
-    }
-    用户展开 = false;
-    重算(view.state);
+    可折: () => current(当前节点) === "mermaid" && 源码可折(当前节点),
+    view,
+    getPos,
   });
 
-  折叠重算.add(重算);
 
   function sync(n: PMNode) {
     当前节点 = n;
@@ -852,7 +897,7 @@ export function codeBlockNodeView(
     box.dataset.mermaid = lang === "mermaid" ? "1" : "0";
     scheduleRender(n);
     // 内容变了（她删了几行、或从 30 行粘成 2 行）→ 折叠状态与按钮要跟着重判
-    重算(view.state);
+    折叠.重算(view.state);
   }
 
   select.addEventListener("change", () => {
@@ -903,7 +948,7 @@ export function codeBlockNodeView(
     destroy: () => {
       if (renderTimer) clearTimeout(renderTimer);
       // 145：视图没了就要从折叠名册里摘掉，否则插件每次选区变动都在给孤儿算状态
-      折叠重算.delete(重算);
+      折叠.销毁();
       // 正在改字时切走模式（组件被卸载）：把 contenteditable 收掉，
       // 否则那张临时网口留在文档里，PM 的 DOM 与模型就对不上了
       if (editing) {
@@ -962,6 +1007,22 @@ export function mathBlockNodeView(
 
   box.append(bar, preview, pre);
 
+  /*
+   * 145：公式块是「源码 + 排版结果」两份同屏 —— 正是她 2026-10-22 定的那条口径里
+   * 「既展示源码又通过其他方式展示的内容」，所以这一类收；普通代码块不收。
+   * 与 Mermaid 共用同一套 `挂折叠`（光标进块就展开、光标在块里不给「收起」、
+   * 点开后把整块源码滚进视口），两边规矩一条不差，抄两遍早晚改岔。
+   */
+  let 当前节点 = node;
+  const 折叠 = 挂折叠({
+    box,
+    bar,
+    源区: pre,
+    可折: () => 源码可折(当前节点),
+    view,
+    getPos,
+  });
+
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSource = "";
   let queuedSource = "";
@@ -1001,7 +1062,11 @@ export function mathBlockNodeView(
     view.focus();
   });
 
-  const sync = (n: PMNode) => schedule(n.textContent);
+  const sync = (n: PMNode) => {
+    当前节点 = n;
+    schedule(n.textContent);
+    折叠.重算(view.state);
+  };
   sync(node);
 
   return {
@@ -1009,7 +1074,12 @@ export function mathBlockNodeView(
     contentDOM: code,
     // 预览与提示条都不是 PM 的内容：DOM 变更与事件都不许交给 PM
     //（`stopEvent` 是 NodeView 的成员，不是编辑器 props 的，放错位置运行时就点不动）
-    ignoreMutation: (m) => bar.contains(m.target as Node) || preview.contains(m.target as Node),
+    /*
+     * 145：口径换成「只有内容区（`code`）里的变更才交给 PM」。
+     * 往 NodeView 自己的 `dom` 上写 `data-folded` 时若这条不挡，
+     * PM 会当成"外部改了节点"→ 销毁重建视图 → 新节点上这个属性本来不存在 → 再重建 → **死循环**。
+     */
+    ignoreMutation: (m) => !code.contains(m.target as Node),
     stopEvent: (e) => bar.contains(e.target as Node) || preview.contains(e.target as Node),
     update: (updated) => {
       if (updated.type.name !== "math_block") return false;
@@ -1018,6 +1088,8 @@ export function mathBlockNodeView(
     },
     destroy: () => {
       if (renderTimer) clearTimeout(renderTimer);
+      // 145：视图没了就要从折叠名册里摘掉，否则插件每次选区变动都在给孤儿算状态
+      折叠.销毁();
     },
     selectNode: () => box.classList.add("is-selected"),
     deselectNode: () => box.classList.remove("is-selected"),

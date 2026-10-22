@@ -3,65 +3,80 @@ import { freshSession, gotoApp, setMode } from "./mockApp";
 
 /**
  * 145：她的原话「编辑模式源码内容默认收起，在如图位置新增编辑源码功能，
- * 点击后显示源码并把滚动条定位到源码位置」。
+ * 点击后显示源码并把滚动条定位到源码位置」；图里红框 = 代码块工具条最右格。
  *
- * 口径（阅读档早就有折叠，这一颗是把同一个动作接到编辑档，且**不能挡住打字**）：
- * - 编辑档的围栏代码块**默认收起**，只露前若干行；
- * - 收起时工具条上出现「编辑源码」，点它 → 展开 + 光标进源码开头 + 视图滚到那块源码；
- * - **光标进到块里就必须展开**（点收着的那几行、上下键走进来都算）——
- *   光标在一个 clipping 掉的 `pre` 里打字 = 看不见自己打的字，这是这条功能唯一真正的陷阱；
- * - 展开之后不自动收回去（她正在看代码，突然收走等于把活儿抢了），
- *   要收由她点「收起」，而**光标还在块里时不给这个按钮**；
- * - 折叠只是 CSS（max-height + mask），**不动 DOM 里的一个字**，所以落盘字节与阅读档都不受影响。
+ * **口径（她 2026-10-22 钉死的，我第一版理解反了）**：
+ * > 代码块不收，收的是既展示源码又通过其他方式展示的内容
+ * 所以参与折叠的只有 **Mermaid 块**（图 = 另一种展示）与**块级公式**（排版结果 = 另一种展示）；
+ * 普通代码块摊开显示、不给按钮。两类都还要 >3 行才收（一行的源码收起来只是多一次点击）。
+ *
+ * 其余规矩：
+ * - 收起时工具条右端给「编辑源码」，点它 → 展开 + 光标进源码开头 + 把整块源码滚进视口；
+ * - **光标进块就当场展开**（点露出的那几行、上下键走进来、点 Mermaid 预览都算）——
+ *   光标在被 clipping 掉的 `pre` 里打字 = 看不见自己打的字，这是这条功能唯一的真陷阱；
+ * - 展开后不自动收回；光标还在块里时**不给「收起」**；
+ * - 折叠只裁可视高度，**不动 DOM 里的一个字**（有用例直接钉落盘字节）。
  *
  * 判据全按可见几何与真实打字，不按 class 名 —— 「看着收起了但点不进去」不算通过。
  */
 
-/** 30 行代码 + 前面一堆正文，把代码块顶到首屏之外，才能测出「滚动条定位」 */
-const 长码 = Array.from({ length: 30 }, (_, i) => `SELECT col_${i + 1} FROM t;`).join("\n");
-const 长文档 = [
+const 三十行 = Array.from({ length: 30 }, (_, i) => `SELECT col_${i + 1} FROM t;`).join("\n");
+const 图源码 = ["flowchart TD", ...Array.from({ length: 16 }, (_, i) => `  n${i} --> n${i + 1}`)].join("\n");
+const 长公式 = [
+  "\\begin{aligned}",
+  "a &= 1 \\\\",
+  "b &= 2 \\\\",
+  "c &= 3 \\\\",
+  "d &= 4",
+  "\\end{aligned}",
+].join("\n");
+
+const 文档 = [
   "# 折叠对照",
   "",
-  ...Array.from({ length: 30 }, (_, i) => `第 ${i + 1} 段正文，用来把代码块顶出首屏。`),
-  "",
   "```sql",
-  长码,
+  三十行,
   "```",
   "",
-  "代码块之后的段落。",
+  "```mermaid",
+  图源码,
+  "```",
+  "",
+  "$$",
+  长公式,
+  "$$",
+  "",
+  "结尾段落。",
   "",
 ].join("\n");
 
-const 短文档 = "# 短码\n\n```sql\nSELECT 1;\n```\n\n正文。\n";
+type 块状态 = { 折: boolean; 钮: string | null; 高: number; 在视口: boolean };
 
-const 状态 = (page: Page) =>
-  page.evaluate(() => {
-    const box = document.querySelector<HTMLElement>(".hp-codebox");
-    if (!box) throw new Error("没有代码块");
-    const pre = box.querySelector<HTMLElement>("pre")!;
-    const btn = box.querySelector<HTMLElement>(".hp-codebox__fold");
-    const 滚动 = document.querySelector<HTMLElement>(".edit-pane__scroll")!;
-    const r = pre.getBoundingClientRect();
-    const c = 滚动.getBoundingClientRect();
+const 量块 = (page: Page, 定位: string): Promise<块状态> =>
+  page.evaluate((sel) => {
+    const box = document.querySelector<HTMLElement>(sel);
+    if (!box) throw new Error(`没有 ${sel}`);
+    // 必须限定**直接子元素**：Mermaid 那个块里，预览区的报错提示本身就是一个 `<pre>`
+    // （`.hp-mermaidbox__error`），它在文档顺序里排在源码那块前面 ——
+    // 用 `querySelector("pre")` 量到的是那个空提示框（高 0），整条判据就废了。
+    const 源区 = box.querySelector<HTMLElement>(":scope > pre")!;
+    const 钮 = box.querySelector<HTMLElement>(".hp-codebox__fold");
+    const 容 = document.querySelector<HTMLElement>(".edit-pane__scroll")!.getBoundingClientRect();
+    const r = 源区.getBoundingClientRect();
     return {
-      收起: box.dataset.folded === "1",
-      按钮: btn ? (btn.hidden ? null : (btn.textContent ?? "").trim()) : null,
-      露出行高: Math.round(pre.getBoundingClientRect().height),
-      全高: (() => {
-        // 临时按展开状态量一次，量完立刻还原（不能让判据改动被测对象）
-        const 原 = box.dataset.folded;
-        box.dataset.folded = "0";
-        const h = Math.round(pre.getBoundingClientRect().height);
-        box.dataset.folded = 原 ?? "0";
-        return h;
-      })(),
-      源码顶: Math.round(r.top - c.top),
-      在视口内: r.top >= c.top - 1 && r.top < c.bottom,
-      scrollTop: Math.round(滚动.scrollTop),
+      折: box.dataset.folded === "1",
+      钮: 钮 && !钮.hidden ? (钮.textContent ?? "").trim() : null,
+      高: Math.round(r.height),
+      在视口: r.top >= 容.top - 1 && r.top < 容.bottom,
     };
-  });
+  }, 定位);
 
-async function 打开(正文: string, page: Page) {
+/** 三类块各自怎么找：语言标注 / mermaid 标记 / 公式块外框 */
+const SQL = '.hp-codebox:has(pre[data-language="sql"])';
+const 图 = '.hp-codebox[data-mermaid="1"]';
+const 式 = ".hp-mathblock";
+
+async function 打开(page: Page, 正文 = 文档) {
   const path = "/demo/折叠-" + test.info().title.replace(/[^\w一-龥]+/g, "-") + ".md";
   await freshSession(page);
   await gotoApp(page);
@@ -80,96 +95,98 @@ async function 打开(正文: string, page: Page) {
   return path;
 }
 
-test("长代码块：编辑档默认收起，工具条上是「编辑源码」", async ({ page }) => {
-  await 打开(长文档, page);
-  const s = await 状态(page);
-  expect(s.收起, "编辑档的长代码块没默认收起").toBe(true);
-  expect(s.按钮, "收起状态下没有「编辑源码」入口").toBe("编辑源码");
-  expect(s.露出行高, `收起后仍然占了 ${s.露出行高}px`).toBeLessThan(s.全高);
+const 读盘 = (page: Page, path: string) =>
+  page.evaluate(
+    (p) => (window as unknown as { __hpMockReadFile?: (a: string) => string | null }).__hpMockReadFile!(p),
+    path
+  );
+
+test("普通代码块不收、不给按钮（她的口径：源码是它唯一的内容）", async ({ page }) => {
+  await 打开(page);
+  const s = await 量块(page, SQL);
+  expect(s.折, "30 行的 sql 块被收起来了 —— 她明确说代码块不收").toBe(false);
+  expect(s.钮).toBe(null);
+  // 反向对照：同一篇里的 Mermaid 块要收
+  const m = await 量块(page, 图);
+  expect(m.折, "Mermaid 的源码没跟着收起").toBe(true);
+  expect(m.钮, "收起状态下没有「编辑源码」入口").toBe("编辑源码");
+});
+
+test("公式块：多行源码也收起（排版结果就是它的另一种展示）", async ({ page }) => {
+  await 打开(page);
+  const s = await 量块(page, 式);
+  expect(s.折).toBe(true);
+  expect(s.钮).toBe("编辑源码");
 });
 
 test("点「编辑源码」：源码显示出来、滚动条定位到那块源码、光标在里面能打字", async ({ page }) => {
-  const path = await 打开(长文档, page);
+  const path = await 打开(page);
   /*
-   * 先把视图滚到「只剩工具条那一行贴在视口下沿」—— 这才是她点这颗键的真实处境：
-   * 收着的块很矮，滚到它时通常正好卡在屏幕最下面，一展开，源码整段往屏幕外长。
+   * 先把视图滚到「只剩工具条贴在视口下沿」—— 这才是她点这颗键的真实处境：
+   * 收着的块很矮，滚到它时通常正好卡在屏幕最下面，一展开源码整段往屏幕外长。
    * 留 24px（只够看见工具条）而不是 80px：留 80px 时源码首行本来就在屏幕里，
-   * 「滚没滚」这条判据量的是空气 —— 上一版还栽得更彻底，它量的是 Playwright
+   * 「滚没滚」这条判据量的是空气 —— 上一版栽得更彻底，它量的是 Playwright
    * 为了点到按钮自己滚的那 16px（问的是我自己，不是产品）。
    */
-  await page.evaluate(() => {
+  await page.evaluate((sel) => {
     const s = document.querySelector<HTMLElement>(".edit-pane__scroll")!;
-    const box = document.querySelector<HTMLElement>(".hp-codebox")!;
+    const box = document.querySelector<HTMLElement>(sel)!;
     const c = s.getBoundingClientRect();
     s.scrollTop += box.getBoundingClientRect().top - c.top - (c.height - 24);
-  });
+  }, 图);
   await page.waitForTimeout(150);
-  const 前 = await 状态(page);
-  expect(前.在视口内, "起点没设好：源码首行本来就在视口里，测不出定位").toBe(false);
-  await page.locator(".hp-codebox__fold").click();
+  const 前 = await 量块(page, 图);
+  expect(前.在视口, "起点没设好：源码首行本来就在视口里，测不出定位").toBe(false);
+  await page.locator(图 + " .hp-codebox__fold").click();
   await page.waitForTimeout(200);
-  const 后 = await 状态(page);
-  expect(后.收起, "点了编辑源码还是收起状态").toBe(false);
-  expect(后.露出行高).toBe(后.全高);
-  expect(后.scrollTop, `展开后源码往屏幕外长了，视图却没跟着走（前 ${前.scrollTop} / 后 ${后.scrollTop}，源码顶相对容器 ${后.源码顶}）`).toBeGreaterThan(
-    前.scrollTop
-  );
-  expect(后.在视口内, "展开后源码不在视口里，等于没定位").toBe(true);
+  const 后 = await 量块(page, 图);
+  expect(后.折, "点了编辑源码还是收起状态").toBe(false);
+  expect(后.高, "展开后高度没变 = 源码没真的显示出来").toBeGreaterThan(前.高 * 3);
+  expect(后.在视口, "展开后源码不在视口里，等于没定位").toBe(true);
   // 光标真的在源码里：直接打字能落进去
-  await page.keyboard.type("-- 打的字 ");
+  await page.keyboard.type("%% 打的字 ");
   await page.keyboard.press("Control+s");
-  const saved = await page.evaluate(
-    (p) => (window as unknown as { __hpMockReadFile?: (a: string) => string | null }).__hpMockReadFile!(p),
-    path
-  );
-  expect(saved).toContain("-- 打的字 SELECT col_1 FROM t;");
+  expect(await 读盘(page, path)).toContain("%% 打的字 flowchart TD");
 });
 
 test("收起时点露出来的那几行：光标进得来、块当场展开", async ({ page }) => {
-  await 打开(长文档, page);
-  expect((await 状态(page)).收起).toBe(true);
-  await page.locator(".hp-codebox > pre").click({ position: { x: 40, y: 8 } });
+  await 打开(page);
+  expect((await 量块(page, 式)).折).toBe(true);
+  await page.locator(式 + " > pre").click({ position: { x: 30, y: 6 } });
   await page.waitForTimeout(200);
-  expect((await 状态(page)).收起, "点在收起的代码块上却没展开，等于看不见自己打的字").toBe(false);
+  expect((await 量块(page, 式)).折, "点在收起的公式源码上却没展开，等于看不见自己打的字").toBe(false);
 });
 
-test("展开之后不自己收回去；光标离开后才给「收起」", async ({ page }) => {
-  await 打开(长文档, page);
-  await page.locator(".hp-codebox__fold").click();
+test("展开之后不自己收回去；光标离开才给「收起」，点了收得回去", async ({ page }) => {
+  await 打开(page);
+  await page.locator(图 + " .hp-codebox__fold").click();
   await page.waitForTimeout(150);
   await page.keyboard.type("x");
-  const 打字后 = await 状态(page);
-  expect(打字后.收起, "正在打字却被自动收回去了").toBe(false);
-  expect(打字后.按钮, "光标还在块里却给了「收起」按钮").toBe(null);
-  // 光标走到块外面（末尾那段正文）
+  const 打字后 = await 量块(page, 图);
+  expect(打字后.折, "正在打字却被自动收回去了").toBe(false);
+  expect(打字后.钮, "光标还在块里却给了「收起」按钮").toBe(null);
   await page.locator(".ProseMirror p").last().click();
   await page.waitForTimeout(150);
-  expect(await 状态(page).then((s) => s.按钮), "光标出去了还是没给「收起」入口").toBe("收起");
-});
-
-test("短代码块不收起、不给按钮（别为一行代码挡路）", async ({ page }) => {
-  await 打开(短文档, page);
-  const s = await 状态(page);
-  expect(s.收起, "三行以内的代码块被收起来了").toBe(false);
-  expect(s.按钮).toBe(null);
+  expect((await 量块(page, 图)).钮, "光标出去了还是没给「收起」入口").toBe("收起");
+  await page.locator(图 + " .hp-codebox__fold").click();
+  await page.waitForTimeout(150);
+  expect((await 量块(page, 图)).折, "点了「收起」没收回去").toBe(true);
 });
 
 test("折叠不改字节：收起状态直接保存，落盘内容与不折叠一致", async ({ page }) => {
-  const path = await 打开(长文档, page);
-  expect((await 状态(page)).收起).toBe(true);
+  const path = await 打开(page);
+  expect((await 量块(page, 图)).折).toBe(true);
+  expect((await 量块(page, 式)).折).toBe(true);
   await page.keyboard.press("Control+s");
-  const saved = await page.evaluate(
-    (p) => (window as unknown as { __hpMockReadFile?: (a: string) => string | null }).__hpMockReadFile!(p),
-    path
-  );
-  expect(saved).toBe(长文档);
+  expect(await 读盘(page, path)).toBe(文档);
 });
 
-test("Mermaid 块：源码收起，点预览照样进源码（110 的点开即改不能被折叠挡住）", async ({ page }) => {
-  const 边 = Array.from({ length: 16 }, (_, i) => `  n${i} --> n${i + 1}`).join("\n");
-  await 打开(`# 图\n\n\`\`\`mermaid\nflowchart TD\n${边}\n\`\`\`\n`, page);
-  expect((await 状态(page)).收起, "Mermaid 的源码没跟着收起").toBe(true);
-  await page.getByTestId("pm-mermaid-preview").click();
-  await page.waitForTimeout(200);
-  expect((await 状态(page)).收起, "点预览没把源码展开").toBe(false);
+test("语言从 sql 改成 mermaid：这块跟着收起 —— 折叠判据是现读的，不靠重建视图", async ({ page }) => {
+  await 打开(page);
+  expect((await 量块(page, SQL)).折).toBe(false);
+  await page.locator(SQL + ' select[data-testid="pm-codelang"]').selectOption("mermaid");
+  await page.waitForTimeout(400);
+  const s = await 量块(page, 图);
+  expect(s.折, "改成 mermaid 之后没跟着收起（110 起两种形态共用一个视图，判据必须现读）").toBe(true);
+  expect(s.钮).toBe("编辑源码");
 });
