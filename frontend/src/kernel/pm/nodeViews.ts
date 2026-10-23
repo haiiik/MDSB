@@ -3,8 +3,9 @@ import type { EditorView, NodeView } from "prosemirror-view";
 import { Plugin, TextSelection, type EditorState } from "prosemirror-state";
 import { t, tf } from "../../i18n";
 import { paintMath } from "../math";
-import { renderMermaid } from "../mermaid";
+import { renderMermaid, 装入图 } from "../mermaid";
 import { addDismiss } from "../enhance";
+import { attachRightButtonPan } from "../panDrag";
 import {
   applyLabelEdit,
   findTextSpans,
@@ -103,13 +104,17 @@ function 挂折叠(a: {
     const 收 = a.可折() && !用户展开 && !光标在块内(state);
     a.box.dataset.folded = 收 ? "1" : "0";
     /*
-     * 按钮三态，缺一个都会挡路：
+     * 按钮两态，**只要这块可折就一直挂着**（149-B）：
      * - 收着 → 「编辑源码」（她要的入口）；
-     * - 她点开过、光标已经出去了 → 「收起」（总得能再收回去）；
-     * - 光标还在块里 / 这块本来就不该折 → **不给按钮**：
-     *   正在打字时把源码收走 = 把纸从她手底下抽掉。
+     * - 展开着 → 「收起」，**光标还在块里也给**。
+     *
+     * 145/146 那一版是「光标在块里就不给按钮」，理由是"正在打字时别把纸抽走"。
+     * 实测这条把回路堵死了：点「编辑源码」的第一件事就是把光标送进源码，
+     * 于是刚展开的那一块**恰好是唯一不给「收起」的那一块**，
+     * 她 10-22 的原话就是「编辑源码如何关闭？」。
+     * 不抽纸的办法不是藏键，是**点下去先把光标挪出块**（见下面的 click）。
      */
-    if (!a.可折() || (!收 && 光标在块内(state))) {
+    if (!a.可折()) {
       fold.hidden = true;
       return;
     }
@@ -147,6 +152,22 @@ function 挂折叠(a: {
       return;
     }
     用户展开 = false;
+    /*
+     * 149-B：收起时**光标可能正泡在这块源码里**（点「编辑源码」就是把光标送进去的那一下）。
+     * 直接把 `data-folded` 拨回去 = 源码区被 max-height 裁成 0，光标还在里面、
+     * 看不见却还在吃输入，她接着打字就打进了一段隐形的文字里。
+     * 所以先把光标挪到**这一块之后**（142 之后文档永远以普通段落收尾，
+     * 最后一块后面必定还有一段可以落脚），再重算 —— 重算时 `光标在块内` 已经为假，收得下去。
+     */
+    if (pos != null && 光标在块内(a.view.state)) {
+      const n = a.view.state.doc.nodeAt(pos);
+      if (n) {
+        const 外 = Math.min(pos + n.nodeSize, a.view.state.doc.content.size);
+        a.view.dispatch(
+          a.view.state.tr.setSelection(TextSelection.create(a.view.state.doc, 外)).scrollIntoView()
+        );
+      }
+    }
     重算(a.view.state);
   });
 
@@ -527,6 +548,8 @@ export function codeBlockNodeView(
 
   const previewSvg = document.createElement("div");
   previewSvg.className = "hp-mermaidbox__svg";
+  /** 151：图比正文宽时按住右键拖出那段溢出（与阅读档共用 `kernel/panDrag`，两处不各写一份） */
+  const 解除拖动 = attachRightButtonPan(previewSvg);
 
   const previewError = document.createElement("pre");
   previewError.className = "hp-mermaidbox__error";
@@ -550,10 +573,17 @@ export function codeBlockNodeView(
     // 期间用户又改了 → 丢弃这次结果，避免旧图盖住新图
     if (lastSource !== source) return;
     if (result.svg) {
-      previewSvg.innerHTML = result.svg;
+      /*
+       * 152：`markEditableLabels` 会**重写标签里的内容**来挂"双击改字"，
+       * 所以它必须作为「收尾」传进 `装入图`，排在对比度兜底**之前**跑完 ——
+       * 先前写成"先兜底再标记"，标记把翻好的行内颜色连同旧元素一起换掉，
+       * 结果阅读档好了、编辑档还是浅灰字（判据按真正画字的那个叶子量才抓到）。
+       */
+      装入图(previewSvg, result.svg, () => {
+        markEditableLabels(previewSvg.querySelector("svg"), source);
+      });
       previewError.textContent = "";
       preview.dataset.state = "done";
-      markEditableLabels(previewSvg.querySelector("svg"), source);
     } else {
       previewSvg.innerHTML = "";
       previewError.textContent = t("mermaid.errorPrefix") + (result.error ?? "");
@@ -1045,6 +1075,8 @@ export function codeBlockNodeView(
       if (renderTimer) clearTimeout(renderTimer);
       // 145：视图没了就要从折叠名册里摘掉，否则插件每次选区变动都在给孤儿算状态
       折叠.销毁();
+      // 151：右键拖图的监听跟着视图一起摘（NodeView 的 DOM 会被复用/丢弃，留着就是泄漏）
+      解除拖动();
       // 正在改字时切走模式（组件被卸载）：把 contenteditable 收掉，
       // 否则那张临时网口留在文档里，PM 的 DOM 与模型就对不上了
       if (editing) {

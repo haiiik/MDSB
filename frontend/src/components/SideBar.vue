@@ -383,15 +383,26 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
   border-bottom: 1px solid var(--hp-border);
 }
 
-/* 两个页签**按整栏宽度居中**（收起把手是绝对定位贴在右边缘，不参与居中计算，
-   否则页签组会被推得偏左 —— 实测差 23px，她的眼睛看得出来） */
+/*
+ * 153（她 10-23：「继续加宽标签宽度和底部色条宽度，尽可能对齐下方滚动条左侧」，红框圈住这一行）：
+ * 两颗页签从「按内容宽 + 整组居中」改成**平分这一行**，右端让出收起把手那一格。
+ *
+ * 原来两侧各空 44px（页签 84px 一颗，落在 44→216），整条看着往中间缩，
+ * 与下方一直顶到滚动条的列表不成形。现在两颗各 ~115px，
+ * 下划线（色条）跟着从 60px 变到 ~99px。
+ *
+ * 为什么停在把手左缘（237）而不是滚动条左缘（~247）：那 22px 是「收起侧栏」的点击区，
+ * 页签压上去就点不着了 —— 她说的是"尽可能"，这一格让得起。
+ */
 .sidebar__tabs {
   display: flex;
   align-items: stretch;
-  justify-content: center;
-  gap: 4px;
+  justify-content: stretch;
+  gap: 8px;
   flex: 1;
   min-width: 0;
+  /* 让出 `.sidebar__edge` 那一格（22px），两颗页签的右缘正好停在把手左边界 */
+  padding-right: 22px;
 }
 
 /*
@@ -408,8 +419,8 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
   align-items: center;
   justify-content: center;
   gap: 6px;
-  flex: 0 0 auto;
-  min-width: 84px;
+  flex: 1 1 0;
+  min-width: 0;
   height: 32px;
   padding: 0 12px;
   border: 0;
@@ -435,9 +446,11 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
 .sidebar__tab.is-active::after {
   content: "";
   position: absolute;
-  right: 12px;
+  /* 153：色条跟着页签一起加宽（左右各缩 8px，原来是 12px —— 页签本身已经宽了近一半，
+     再留 12px 会显得这条线"没跟着长"） */
+  right: 8px;
   bottom: 0;
-  left: 12px;
+  left: 8px;
   height: 2px;
   border-radius: 2px 2px 0 0;
   background: var(--hp-accent);

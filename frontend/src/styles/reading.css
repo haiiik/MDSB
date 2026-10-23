@@ -227,6 +227,29 @@
 }
 
 /*
+ * 149-C：渲染好的那张图**按编辑档那块的形状装盒**（边框 + 圆角 + 底色 + 空功能栏），
+ * 两档整块等高，切模式时图不上跳下跳。横向滚动交给里面的 `.hp-mermaidbox__svg`，
+ * 外框只 `overflow: hidden` 裁圆角 —— 外框自己再滚一次就是两条滚动条。
+ */
+.hp-doc .hp-mermaid[data-state="done"] {
+  padding: 0;
+  border: 1px solid var(--hp-border);
+  border-radius: 6px;
+  background: var(--hp-surface);
+  overflow: hidden;
+}
+
+/*
+ * 编辑档 `.hp-mermaidbox` 下面那条虚线是「预览 / 源码」的分隔线，阅读档下面没有源码 ——
+ * 留着就是一根悬在图底下的虚线（截图自查抓到的）。改成**同宽透明实线**：
+ * 高度一分不变（149-C 的等高判据靠的就是这条边框占的那 1px），只是看不见了。
+ */
+.hp-doc .hp-mermaid[data-state="done"] .hp-mermaidbox {
+  border-bottom-color: transparent;
+  border-bottom-style: solid;
+}
+
+/*
  * 长中文标签折行：mermaid 按 `flowchart.wrappingWidth` 算好了折行与盒子高度，
  * 却把标签元素写成 `white-space: nowrap`（探针实测），于是中文一行冲出去被
  * foreignObject 裁掉 —— 她截图里「二级单位会签：设备管理主管…」就是这么断的。
@@ -553,6 +576,10 @@
   padding: 4px 8px;
   border-bottom: 1px solid var(--hp-border);
   user-select: none;
+  /* 149-C：阅读档那条是空 div（没有语言下拉、没有提示字），
+   * 不钉一个 min-height 就只有 9px，两档的功能栏对不上。
+   * 编辑档真栏实测正好 33px，所以这条对它是个恒等式。 */
+  min-height: var(--hp-codebar-h);
 }
 
 .hp-doc .hp-codebox__lang {
@@ -696,6 +723,16 @@
 
 .hp-doc .hp-mermaidbox__svg {
   overflow-x: auto;
+}
+
+/*
+ * 151：按住右键拖 = 滑那段溢出。拖的时候给一个"抓手"反馈，
+ * 同时关掉选字 —— 右键本来就会被 preventDefault 挡掉选区，这里再兜一层，
+ * 免得哪天从别的元素起按（比如图的空白边）又选出满屏蓝糊糊的笔画。
+ */
+.hp-doc .hp-mermaidbox__svg[data-hp-panning="1"] {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .hp-doc .hp-mermaidbox__svg svg {

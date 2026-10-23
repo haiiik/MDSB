@@ -80,9 +80,16 @@ test("列表末尾的空项按回车退出列表，而不是无限加项", async
   const src = "# 清单\n\n- 甲\n- 乙\n\n末段。\n";
   await seedAndOpen(page, src);
 
-  // 光标放到「乙」末尾，按回车产生新空项，再按一次应退出列表
-  await page.locator(".ProseMirror li").last().click();
-  await page.keyboard.press("End");
+  /*
+   * 光标放到「乙」末尾：走 `placeCaret`，不走「click + End」。
+   * 这条是 105/106 就记过的那个不可靠写法漏在这里的最后一处 ——
+   * 点击产生的选区事务还没被 PM 处理，键盘事件就发出去了，回车会打在**上一个**光标位置，
+   * 表现成"退出没生效"的假产品缺陷（本轮 5 连跑红 1 次就是这么来的）。
+   */
+  const 项 = page.locator(".ProseMirror li");
+  // 先等列表真的挂上（EditView 是异步组件；`count()` 不等待，会拿到 0 → nth 变成 -1）
+  await expect(项).toHaveCount(2);
+  await placeCaret(page, ".ProseMirror li", -1, (await 项.count()) - 1);
   await page.keyboard.press("Enter");
   await page.keyboard.press("Enter");
   await page.keyboard.type("退出后的段落");

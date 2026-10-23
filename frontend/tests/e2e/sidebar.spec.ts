@@ -166,7 +166,7 @@ test("折叠态下点大纲链接不报错（正文未渲染时静默失败）",
 
 /* ---------- 外壳改造：页签居中、叫「导航」、收起把手贴在栏的右侧边 ---------- */
 
-test("「大纲」改名「导航」，两个页签居中，收起把手在栏的右侧边", async ({ page }) => {
+test("「大纲」改名「导航」，两个页签铺满这一行，收起把手在栏的右侧边", async ({ page }) => {
   await pickAndOpen(page, DEMO);
 
   await expect(page.getByTestId("page-outline")).toHaveText("导航");
@@ -178,15 +178,21 @@ test("「大纲」改名「导航」，两个页签居中，收起把手在栏�
   const outline = (await box("page-outline"))!;
   const edge = (await box("collapse-sidebar"))!;
 
-  // 页签组整体居中：左右留白大致相等（允许 4px 取整误差）
-  const gapLeft = recent.x - sidebar.x;
-  const gapRight = sidebar.x + sidebar.width - (outline.x + outline.width);
-  expect(gapLeft).toBeGreaterThan(0);
-  expect(Math.abs(gapLeft - gapRight)).toBeLessThan(8);
+  /*
+   * 127 第二批定的是「整组居中、两侧留白相等」，153 她改口了：
+   * 「继续加宽标签宽度和底部色条宽度，尽可能对齐下方滚动条左侧」——
+   * 于是两颗页签改成**平分这一行**：左缘贴住栏的左边界，右缘停在收起把手的左边界。
+   * 这条判据跟着换成新口径（不是删掉）：两侧留白一旦又变成 44px 那种"往中间缩"，这里要红。
+   */
+  expect(Math.round(recent.x - sidebar.x), "第一颗没贴住栏的左边界").toBeLessThanOrEqual(1);
+  expect(Math.round(edge.x - (outline.x + outline.width)), "第二颗右缘没停在把手左边界").toBeLessThanOrEqual(1);
+  expect(Math.abs(recent.width - outline.width), "两颗不等宽").toBeLessThanOrEqual(1);
+  expect(recent.width, "页签又缩回窄的了").toBeGreaterThanOrEqual(110);
 
-  // 收起把手贴着栏的右边缘，不再挤在页签后面
+  // 收起把手贴着栏的右边缘；153 之后页签右缘**正好停在把手左边界**（齐平，不再留缝），
+  // 所以这条从"严格在右边"改成"不重叠"—— 页签压到把手上面就要红。
   expect(sidebar.x + sidebar.width - (edge.x + edge.width)).toBeLessThan(4);
-  expect(edge.x).toBeGreaterThan(outline.x + outline.width);
+  expect(edge.x).toBeGreaterThanOrEqual(outline.x + outline.width);
 });
 
 test("收起把手点下去仍能折叠与再展开（位置换了不影响行为）", async ({ page }) => {

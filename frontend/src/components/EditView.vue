@@ -9,7 +9,7 @@ import { closeHistory, history, redo, undo } from "prosemirror-history";
 import { EditorView } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
 import { patch } from "../kernel/blockPatch";
-import { domTopAnchor, scrollDomToAnchor } from "../kernel/anchors";
+import { domTopAnchor, scrollDomToAnchor, type 锚 } from "../kernel/anchors";
 import { mdastToDoc } from "../kernel/pm/mdastToDoc";
 import { codeBlockNodeView, mathBlockNodeView, codeFoldWatchPlugin } from "../kernel/pm/nodeViews";
 import { hpInputRules } from "../kernel/pm/inputRules";
@@ -493,8 +493,8 @@ defineExpose({
    * 编辑档的块就是 PM 文档的顶层节点，选择器是它自己的事。
    */
   topAnchor: () => domTopAnchor(scroller.value, ".ProseMirror > *"),
-  applyAnchor: (needle: string, near = -1) =>
-    scrollDomToAnchor(scroller.value, ".ProseMirror > *", needle, near),
+  applyAnchor: (a: 锚 | null, near = -1) =>
+    scrollDomToAnchor(scroller.value, ".ProseMirror > *", a, near, ".ProseMirror tr, .ProseMirror li"),
 });
 </script>
 
@@ -602,6 +602,24 @@ defineExpose({
  */
 .edit-pane :deep(.hp-edit > .ProseMirror > *:first-child) {
   margin-top: 0;
+}
+
+/*
+ * 149-A（她 10-22：「编辑模式为什么会有奇怪的换行」）：
+ * prosemirror-view 自带一条 `.ProseMirror { white-space: pre-wrap; white-space: break-spaces }`
+ * —— 后一句是前一句的降级写法，Chrome 认 `break-spaces`，于是**源码里的软换行在编辑档真换了一行**。
+ * 探针实测（同一段，源码两行、中间没有空行）：阅读档 26px、编辑档 53px，
+ * 多出来那一整行还是行尾那个 `\n` 自己占的（`break-spaces` 连行尾空白都占一格）。
+ * 阅读档走 HTML 默认 `normal`：软换行折成一个空格。两档要一致，只能统一到阅读档那条口径。
+ *
+ * **只改显示，不动文档**：PM 的 `whitespace` 解析规则本来就是 `normal`
+ * （脚注定义块要显式 `code: true` 才保得住续行换行，正是同一件事的反面，见 `pm/schema.ts`），
+ * 所以这里不会让她打的字在落盘时变样。真需要原样保留的三处 —— 代码块 `pre`、
+ * 脚注定义 `.hp-fndef`、公式源码 `.hp-mathblock__src` —— 各自都写了 `white-space`，
+ * 继承不到这一条；表格格子由 `.hp-doc th/td` 那条带着，两档同一份，也不受影响。
+ */
+.edit-pane :deep(.hp-edit > .ProseMirror) {
+  white-space: normal;
 }
 
 /*

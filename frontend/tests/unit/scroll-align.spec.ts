@@ -1,5 +1,13 @@
 import { expect, it } from "vitest";
-import { anchorText, pickAnchorPos, ratioOf, scrollTopFor } from "../../src/kernel/anchors";
+import {
+  anchorScrollTop,
+  anchorText,
+  pickAnchorIndex,
+  pickAnchorPos,
+  ratioOf,
+  scrollTopFor,
+  type 锚,
+} from "../../src/kernel/anchors";
 
 /**
  * 140：跨模式定位换算的那两个纯函数。
@@ -101,4 +109,45 @@ it("pickAnchorPos：同名的两块里挑离预测位置最近的那个，不是
   expect(pickAnchorPos(候选, anchorText("这句根本不存在"), 1600)).toBe(-1);
   // 空键不干活（否则每块都算命中）
   expect(pickAnchorPos(候选, "", 1600)).toBe(-1);
+});
+
+/**
+ * 150（她：「编辑模式的位置，切换到阅读模式后仍对应不上」）：
+ * 锚点从「哪一块」补成「哪一块 + 这一块内部已经滚过去多少」。
+ *
+ * 只有块级精度时，停在**比屏幕还高的一块**里（60 行表格、长引用、大代码块）
+ * 会被整块当成一个坐标：切过去只能回到块首。实测差 1109px（编辑档表格第 28 行 →
+ * 阅读档落到表头）。这几条钉的就是补上之后那笔算术。
+ */
+it("anchorScrollTop：块内偏移要跟着搬过去，不再落回块首", () => {
+  // 顶端块：源档里高 2400，她已经往下滚过 1200（偏移正好一半）
+  const 源: 锚 = { 键: anchorText("编号"), 内偏: 1200, 块高: 2400 };
+  // 目标档同一块两档等高（143 / 149-A 之后就是这个前提）→ 偏移原样搬
+  expect(anchorScrollTop({ top: 500, h: 2400 }, 源)).toBe(500 + 1200 - 12);
+  // 目标档这块矮一成 → 偏移按同一比例缩，不能照抄像素
+  expect(anchorScrollTop({ top: 500, h: 1200 }, 源)).toBe(500 + 600 - 12);
+  // 块高量不到（0 / 缺字段）时退回"照抄偏移"，不出现除零也不出现 NaN
+  expect(anchorScrollTop({ top: 500 }, 源)).toBe(500 + 1200 - 12);
+  expect(anchorScrollTop({ top: 500, h: 0 }, 源)).toBe(500 + 1200 - 12);
+  expect(Number.isNaN(anchorScrollTop({ top: 0, h: 0 }, { 键: "x", 内偏: 0, 块高: 0 }))).toBe(false);
+});
+
+it("anchorScrollTop：偏移按构造必定落在块内，不会翻到下一块", () => {
+  // 顶端块的定义是「底边还在视口上沿之下」→ 内偏 < 块高，缩放后仍 < 目标块高
+  const 源: 锚 = { 键: anchorText("编号"), 内偏: 2399, 块高: 2400 };
+  const 落 = anchorScrollTop({ top: 500, h: 4800 }, 源);
+  expect(落 - 500).toBeLessThan(4800); // 还在这一块里
+  expect(落).toBeGreaterThan(500); // 但绝不是块首
+});
+
+it("pickAnchorIndex：返回下标，块高字段带着走（源档与目标档的换算要用同一个候选表）", () => {
+  const 候选 = [
+    { text: anchorText("概述"), top: 100, h: 40 },
+    { text: anchorText("中间段"), top: 900, h: 40 },
+    { text: anchorText("概述"), top: 1700, h: 2400 },
+  ];
+  expect(pickAnchorIndex(候选, anchorText("概述"), 1600)).toBe(2);
+  expect(pickAnchorIndex(候选, anchorText("概述"), 90)).toBe(0);
+  expect(pickAnchorIndex(候选, anchorText("不存在"), 90)).toBe(-1);
+  expect(pickAnchorIndex(候选, "", 90)).toBe(-1);
 });

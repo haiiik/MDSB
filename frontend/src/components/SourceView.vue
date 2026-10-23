@@ -12,7 +12,15 @@ import {
   syntaxHighlighting,
 } from "@codemirror/language";
 import { makeCmAdapter, searchHighlightExtension } from "../kernel/searchCm";
-import { anchorText, domTopAnchor, ANCHOR_KEY, ANCHOR_KEY_SHORT, pickAnchorPos } from "../kernel/anchors";
+import {
+  anchorText,
+  anchorScrollTop,
+  domTopAnchor,
+  pickAnchorIndex,
+  ANCHOR_KEY,
+  ANCHOR_KEY_SHORT,
+  type 锚,
+} from "../kernel/anchors";
 import { registerSearchAdapter, recomputeIfOpen, unregisterSearchAdapter } from "../state/search";
 import {
   HINT_EDIT_TO_SOURCE,
@@ -216,32 +224,37 @@ defineExpose({
    */
   topAnchor: () => domTopAnchor(view?.scrollDOM ?? null, ".cm-line"),
   /**
-   * 把"顶端那一段字"所在的那一行滚到视口上沿。
+   * 把"顶端那一段字"所在的那一行滚到视口上沿（150 起带上**块内偏移**）。
    * 跨模式定位按**内容**落点，不按 scrollTop 比例 —— 三档内容高度不同，
    * 比例换算在真壳里实测会差到 3 段（浏览器里恰好看不出来）。
+   *
+   * 这里的坐标一律走 CM 自己的 `lineBlockAt`，不用 DOM rect：CM 把没滚到过的区域
+   * 按估算行高建 heightmap，DOM 上量到的可能是估算值（140 记过「设 150 停在 266」）。
    */
-  applyAnchor: (needle: string, near = -1) => {
-    if (!view || !needle) return false;
+  applyAnchor: (a: 锚 | null, near = -1) => {
+    if (!view || !a || !a.键) return false;
     const 视 = view;
     // 先按**全长键**找，配不到再退到短键；命中的行可能不止一条（重复标题），
-    // 交给 pickAnchorPos 按「离预测位置最近」挑 —— 按文档顺序挑会认错段。
+    // 交给 pickAnchorIndex 按「离预测位置最近」挑 —— 按文档顺序挑会认错段。
     const 扫 = (n: number) => {
-      const 键 = needle.slice(0, n);
-      const out: Array<{ text: string; top: number }> = [];
+      const 键 = a.键.slice(0, n);
+      const out: Array<{ text: string; top: number; h: number }> = [];
       if (!键) return out;
       for (let i = 1; i <= 视.state.doc.lines; i++) {
         const l = 视.state.doc.line(i);
         const t = anchorText(l.text);
         if (!t.startsWith(键)) continue;
-        out.push({ text: t, top: 视.lineBlockAt(l.from).top });
+        const b = 视.lineBlockAt(l.from);
+        out.push({ text: t, top: b.top, h: b.height });
       }
       return out;
     };
-    let 命中 = 扫(Math.min(needle.length, ANCHOR_KEY));
-    if (命中.length === 0) 命中 = 扫(Math.min(needle.length, ANCHOR_KEY_SHORT));
-    const v = pickAnchorPos(命中, needle, near);
-    if (v < 0) return false;
-    view.scrollDOM.scrollTop = v;
+    let 命中 = 扫(Math.min(a.键.length, ANCHOR_KEY));
+    if (命中.length === 0) 命中 = 扫(Math.min(a.键.length, ANCHOR_KEY_SHORT));
+    const i = pickAnchorIndex(命中, a.键, near);
+    if (i < 0) return false;
+    // 折行的源码行可以比视口还高：块内偏移按行高比例搬过来，才落回她站着的那一行
+    view.scrollDOM.scrollTop = anchorScrollTop(命中[i], a);
     return true;
   },
 });

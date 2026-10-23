@@ -220,6 +220,15 @@ interface LightboxSpec {
    * SVG 克隆是现成的 —— 不等 load 去量图片会拿到 0，一进来就糊满屏。
    */
   ready?: (run: () => void) => void;
+  /**
+   * 149-D：**哪些键按住算平移**（`PointerEvent.button`：0 左、2 右）。
+   *
+   * 她 10-22 原话「mermaid 图上只是右键按住滑动」，随后更正：「打错字了，是**支持**右键按住」——
+   * 所以左键照旧能拖，右键是**加**进来的那条路，不是换掉。
+   * 为什么值得加：大图里那些字是 SVG 里的真文字，左键按住拖会顺手**选中一片字**
+   * （蓝糊糊的笔画盖在图上），想干净地挪图时右键没有这个副作用。
+   */
+  panButtons?: number[];
 }
 
 function showInLightbox(spec: LightboxSpec): void {
@@ -235,7 +244,7 @@ function showInLightbox(spec: LightboxSpec): void {
   info.textContent = spec.label;
   const hint = document.createElement("span");
   hint.className = "hp-lightbox__hint";
-  hint.textContent = t("lightbox.hint");
+  hint.textContent = t(spec.panButtons ? "lightbox.hintBoth" : "lightbox.hint");
   const reset = document.createElement("button");
   reset.type = "button";
   reset.dataset.testid = "lightbox-fit";
@@ -273,7 +282,17 @@ function showInLightbox(spec: LightboxSpec): void {
   let dragging = false;
   let lastX = 0;
   let lastY = 0;
+  const 平移键 = spec.panButtons ?? [0];
   spec.node.addEventListener("pointerdown", (e) => {
+    const 键 = (e as PointerEvent).button;
+    if (!平移键.includes(键)) return;
+    /*
+     * 右键这条路要多做两件事，少一件都平移不动：
+     * ① `preventDefault` —— 不挡掉默认动作，右键按下会在 SVG 上起一段选区；
+     * ② 接住 `contextmenu`（下面）—— 不接住的话松手那一刻弹系统菜单，灯箱被顶到后台。
+     * 左键**不挡**：那是原来的行为，按住拖顺手、要选字也还选得了（她更正过口径，别动它）。
+     */
+    if (键 !== 0) e.preventDefault();
     dragging = true;
     lastX = (e as PointerEvent).clientX;
     lastY = (e as PointerEvent).clientY;
@@ -288,6 +307,11 @@ function showInLightbox(spec: LightboxSpec): void {
     apply();
   });
   spec.node.addEventListener("pointerup", () => (dragging = false));
+  spec.node.addEventListener("pointercancel", () => (dragging = false));
+  // 只有认右键的灯箱才接住系统菜单（图片那条不认右键，别动它的原生菜单）
+  if (平移键.includes(2)) {
+    spec.node.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
 
   reset.addEventListener("click", fitToWindow);
 
@@ -352,5 +376,5 @@ export function openSvgLightbox(svg: SVGSVGElement, label = t("lightbox.mermaidT
   clone.style.height = n.h + "px";
   clone.style.maxWidth = "none";
   clone.style.maxHeight = "none";
-  showInLightbox({ node: clone, label, resetLabel: t("lightbox.fit"), size: () => n });
+  showInLightbox({ node: clone, label, resetLabel: t("lightbox.fit"), size: () => n, panButtons: [0, 2] });
 }

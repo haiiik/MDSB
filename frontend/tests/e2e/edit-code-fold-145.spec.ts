@@ -14,7 +14,7 @@ import { freshSession, gotoApp, setMode } from "./mockApp";
  * - 收起时工具条右端给「编辑源码」，点它 → 展开 + 光标进源码开头 + 把整块源码滚进视口；
  * - **光标进块就当场展开**（点露出的那几行、上下键走进来、点 Mermaid 预览都算）——
  *   光标在被 clipping 掉的 `pre` 里打字 = 看不见自己打的字，这是这条功能唯一的真陷阱；
- * - 展开后不自动收回；光标还在块里时**不给「收起」**；
+ * - 展开后不自动收回；「收起」在展开态**一直给着**（149-B 改的，理由见下面那条用例的注释）；
  * - 折叠只裁可视高度，**不动 DOM 里的一个字**（有用例直接钉落盘字节）。
  *
  * 判据全按可见几何与真实打字，不按 class 名 —— 「看着收起了但点不进去」不算通过。
@@ -166,20 +166,49 @@ test("光标用方向键走进收起的源码：块当场展开（收起 ≠ 进
   expect(s.高, "展开了却没高度").toBeGreaterThan(0);
 });
 
-test("展开之后不自己收回去；光标离开才给「收起」，点了收得回去", async ({ page }) => {
+test("展开之后不自己收回去；「收起」一直给着，点了收得回去（149-B）", async ({ page }) => {
   await 打开(page);
   await page.locator(图 + " .hp-codebox__fold").click();
   await page.waitForTimeout(150);
   await page.keyboard.type("x");
   const 打字后 = await 量块(page, 图);
   expect(打字后.折, "正在打字却被自动收回去了").toBe(false);
-  expect(打字后.钮, "光标还在块里却给了「收起」按钮").toBe(null);
+  /*
+   * 149-B：这一格从「不给按钮」改成「给收起」。
+   * 点「编辑源码」的第一件事就是把光标送进源码，于是刚展开的那一块**恰好是唯一不给「收起」的那一块** ——
+   * 她 10-22 的原话「编辑源码如何关闭？」就是这么来的。
+   * 不抽纸的办法不是藏键，是点下去先把光标挪出块（下面那条用例钉的就是这个）。
+   */
+  expect(打字后.钮, "光标还在块里就不给「收起」= 她把源码打开了却关不掉").toBe("收起");
   await page.locator(".ProseMirror p").last().click();
   await page.waitForTimeout(150);
   expect((await 量块(page, 图)).钮, "光标出去了还是没给「收起」入口").toBe("收起");
   await page.locator(图 + " .hp-codebox__fold").click();
   await page.waitForTimeout(150);
   expect((await 量块(page, 图)).折, "点了「收起」没收回去").toBe(true);
+});
+
+test("149-B：光标还泡在源码里就能点「收起」，收下去时光标跟着搬出块", async ({ page }) => {
+  const path = await 打开(page);
+  await page.locator(图 + " .hp-codebox__fold").click();
+  await page.waitForTimeout(150);
+  expect((await 量块(page, 图)).钮).toBe("收起");
+  // 不挪光标，直接点收起
+  await page.locator(图 + " .hp-codebox__fold").click();
+  await page.waitForTimeout(200);
+  const 后 = await 量块(page, 图);
+  expect(后.折, "光标在块里时点「收起」没收回去（收起判据把光标算进去了，得先把它搬出去）").toBe(true);
+  expect(后.高).toBe(0);
+  /*
+   * 收回去之后打字：字**不能**落进那块看不见的源码里。
+   * 光标若还留在被 clipping 的 `pre` 里，这段输入就静默进了源码 —— 正是 145 那条
+   * 「光标进块就展开」要防的事，收起时必须同样防住。
+   */
+  await page.keyboard.type("Z");
+  await page.keyboard.press("Control+s");
+  const 盘 = await 读盘(page, path);
+  expect(盘, "收起后打的字落进了被藏起来的图源码里").not.toContain("Zflowchart");
+  expect(盘).not.toContain("flowchartZ");
 });
 
 test("折叠不改字节：收起状态直接保存，落盘内容与不折叠一致", async ({ page }) => {

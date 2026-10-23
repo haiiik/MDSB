@@ -199,12 +199,13 @@ const zh = {
   "toc.title": "目录",
   // 灯箱（021 / 127）
   "lightbox.hint": "滚轮缩放 · 拖拽平移",
+  "lightbox.hintBoth": "滚轮缩放 · 左键或右键按住平移",
   "lightbox.close": "关闭 (Esc)",
   "lightbox.reset": "原始尺寸",
   "lightbox.fit": "适应屏幕",
   "lightbox.mermaidTitle": "Mermaid 图（双击可再次打开）",
   // Mermaid 阅读侧（019 / 020）
-  "mermaid.zoomHint": "双击看大图（滚轮缩放、拖拽平移）",
+  "mermaid.zoomHint": "双击看大图；图宽出正文时按住右键可左右拖动",
   "mermaid.diagram": "Mermaid 图",
   "mermaid.errorBlockTitle": "Mermaid 语法错误，图未渲染。以下为原始源码：",
   "mermaid.errorPrefix": "Mermaid 语法错误，图未渲染：",

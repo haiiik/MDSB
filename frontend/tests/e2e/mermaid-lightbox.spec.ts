@@ -45,8 +45,8 @@ test("阅读模式双击图 → 进灯箱，正文里那张还在（是克隆不
   // 原图没被搬走：正文里那张仍在，且文档没塌
   await expect(正文图).toBeVisible();
   await expect(page.getByRole("heading", { name: "大图", level: 1 })).toBeVisible();
-  // 提示条说清了能干什么
-  await expect(box).toContainText("滚轮缩放");
+  // 提示条说清了能干什么（149-D：Mermaid 这份写明**左键或右键**都能拖）
+  await expect(box).toContainText("左键或右键按住平移");
   await expect(box.getByTestId("lightbox-fit")).toHaveText("适应屏幕");
 });
 
@@ -63,14 +63,33 @@ test("滚轮放大、拖拽平移、适应屏幕回到 fit", async ({ page }) =>
   const 放大后 = scaleOf(await stageTransform(page));
   expect(放大后).toBeGreaterThan(fit);
 
-  // 拖拽平移：translate 要跟着手指走
+  /*
+   * 149-D：平移**左键照旧、右键新增**（她原话「mermaid 图上只是右键按住滑动」，
+   * 随后更正「打错字了，是支持右键按住」）—— 右键是加进来的那条路，不是换掉左键。
+   * 值得加的理由：大图里那些字是 SVG 里的真文字，左键按住拖会顺手选中一片字，
+   * 想干净挪图时右键没有这个副作用。所以两颗键都要钉：都拖得动，右键还不许弹系统菜单。
+   */
   const 盒 = (await stage.boundingBox())!;
-  await page.mouse.move(盒.x + 盒.width / 2, 盒.y + 盒.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(盒.x + 盒.width / 2 + 60, 盒.y + 盒.height / 2 + 24, { steps: 4 });
-  await page.mouse.up();
-  const 平移后 = await stageTransform(page);
-  expect(平移后).toMatch(/translate\(\s*[1-9]\d*px,\s*[1-9]\d*px\)/, 平移后);
+  const 中 = { x: 盒.x + 盒.width / 2, y: 盒.y + 盒.height / 2 };
+  const 拖 = async (键: "left" | "right") => {
+    await page.mouse.move(中.x, 中.y);
+    await page.mouse.down({ button: 键 });
+    await page.mouse.move(中.x + 60, 中.y + 24, { steps: 4 });
+    await page.mouse.up({ button: 键 });
+    return stageTransform(page);
+  };
+
+  const 左 = await 拖("left");
+  expect(左, "左键拖不动了（她更正过口径：右键是加，不是换掉左键）").toMatch(
+    /translate\(\s*[1-9]\d*px,\s*[1-9]\d*px\)/
+  );
+  await page.getByTestId("lightbox-fit").click();
+  expect(await stageTransform(page), "复位没把左键拖出来的位移清掉").toContain("translate(0px, 0px)");
+
+  const 右 = await 拖("right");
+  expect(右, "右键按住拖没平移").toMatch(/translate\(\s*[1-9]\d*px,\s*[1-9]\d*px\)/);
+  // 右键松手不许弹系统菜单（弹了灯箱就被顶到后台，平移等于做不动）
+  await expect(page.getByTestId("lightbox")).toBeVisible();
 
   await page.getByTestId("lightbox-fit").click();
   const 复位后 = await stageTransform(page);

@@ -2,7 +2,7 @@
 import { t } from "../i18n";
 import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 import { hydrate } from "../kernel/hydrate";
-import { domTopAnchor, ratioOf, scrollTopFor, scrollDomToAnchor } from "../kernel/anchors";
+import { domTopAnchor, ratioOf, scrollTopFor, scrollDomToAnchor, type 锚 } from "../kernel/anchors";
 import { mountRender, type WidthPreset } from "../kernel/render";
 import type { Host } from "../host/types";
 import {
@@ -106,8 +106,11 @@ const geom = new Map<string, { content: number; view: number }>();
 /** 这篇文档上一次停在哪一档（按标签记，切标签不该做位置换算） */
 const lastMode = new Map<string, Mode>();
 
-/** 各档「视口顶端那一段」的文字前缀 —— 换档后要找回来的是**内容位置**，不是像素 */
-const anchorByMode = new Map<string, string>();
+/**
+ * 各档「视口顶端那一段」的锚点 —— 换档后要找回来的是**内容位置**，不是像素。
+ * 150 起它是「哪一块 + 块内滚过了多少」，只记文字前缀会把停在高块里的位置整段丢掉。
+ */
+const anchorByMode = new Map<string, 锚 | null>();
 
 /** 「标签 × 档」这把复合键：锚点与几何都得按篇分，理由见上面那条注释 */
 const gk = (tabId: string, mode: Mode) => tabId + "|" + mode;
@@ -118,20 +121,23 @@ const gk = (tabId: string, mode: Mode) => tabId + "|" + mode;
  * 免得这些内部类名被写进主入口 chunk（冷启动分包那条判据按内容查，泄漏一次红一次）。
  */
 const READ_BLOCK_SEL = ".hp-doc > *";
+/** 150：顶层块配不上时的第二级候选（源码档一行 = 一块，键对不上整张表） */
+const READ_FALLBACK_SEL = ".hp-doc tr, .hp-doc li";
 
-/** 问某一档「你视口顶端是哪一段」；档位组件还没挂上就返回空串（换档那刻走比例兜底） */
-function topAnchor(mode: Mode): string {
+/** 问某一档「你视口顶端是哪一段、那块内部滚过了多少」；档位组件还没挂上就返回 null（换档那刻走比例兜底） */
+function topAnchor(mode: Mode): 锚 | null {
   if (mode === "read") return domTopAnchor(readScroller.value, READ_BLOCK_SEL);
-  if (mode === "edit") return edit.value?.topAnchor() ?? "";
-  return source.value?.topAnchor() ?? "";
+  if (mode === "edit") return edit.value?.topAnchor() ?? null;
+  return source.value?.topAnchor() ?? null;
 }
 
-/** 把「顶端那一段字」所在的那一块滚到上沿；`near` 是比例预测的位置，用来在同名块里挑最近的那个 */
-function applyAnchor(mode: Mode, needle: string, near: number): boolean {
-  if (!needle) return false;
-  if (mode === "read") return scrollDomToAnchor(readScroller.value, READ_BLOCK_SEL, needle, near);
-  if (mode === "edit") return edit.value?.applyAnchor(needle, near) ?? false;
-  return source.value?.applyAnchor(needle, near) ?? false;
+/** 把「顶端那一段字」所在的那一块滚到上沿（带块内偏移）；`near` 是比例预测的位置，用来在同名块里挑最近的那个 */
+function applyAnchor(mode: Mode, a: 锚 | null, near: number): boolean {
+  if (!a || !a.键) return false;
+  if (mode === "read")
+    return scrollDomToAnchor(readScroller.value, READ_BLOCK_SEL, a, near, READ_FALLBACK_SEL);
+  if (mode === "edit") return edit.value?.applyAnchor(a, near) ?? false;
+  return source.value?.applyAnchor(a, near) ?? false;
 }
 
 /**
@@ -161,7 +167,7 @@ function noteGeom(mode: Mode): void {
  * （实测「设 150 停在 266」）、阅读档 hydrate 完图片与 Mermaid 还会撑高。
  * 所以一笔换档最多兑现 4 帧（每帧都重新按文字找一次落点），用户自己滚一下就作废。
  */
-let pending: { tabId: string; mode: Mode; needle: string; ratio: number; applied: number } | null = null;
+let pending: { tabId: string; mode: Mode; 锚: 锚; ratio: number; applied: number } | null = null;
 
 /** 换档后补的那几帧 */
 const RESTORE_FRAMES = 4;
@@ -201,7 +207,7 @@ function restoreScroll(mode: Mode) {
   if (pending && pending.tabId === tab.id && pending.mode === mode && el) {
     // ① 换算还没兑现完：按**当前**几何与**当前**顶端那段字再落一次
     const near = scrollTopFor(pending.ratio, el.scrollHeight, el.clientHeight);
-    v = applyAnchor(mode, pending.needle, near) ? el.scrollTop : near;
+    v = applyAnchor(mode, pending.锚, near) ? el.scrollTop : near;
     tab.scroll[mode] = v;
     pending.applied++;
     /*
@@ -216,11 +222,11 @@ function restoreScroll(mode: Mode) {
     // ② 换档那一刻：新事务开始，上一笔没兑现完的一律作废
     pending = null;
     const g = geom.get(gk(tab.id, from));
-    const needle = anchorByMode.get(gk(tab.id, from)) ?? "";
+    const a = anchorByMode.get(gk(tab.id, from)) ?? null;
     const r = g ? ratioOf(tab.scroll[from], g.content, g.view) : 0;
     const near = scrollTopFor(r, el.scrollHeight, el.clientHeight);
-    if (applyAnchor(mode, needle, near)) {
-      pending = { tabId: tab.id, mode, needle, ratio: r, applied: 1 };
+    if (applyAnchor(mode, a, near)) {
+      pending = { tabId: tab.id, mode, 锚: a!, ratio: r, applied: 1 };
       v = el.scrollTop;
       // 目标档的 DOM 这会儿常常还没测准（CM 首帧按估算行高建 heightmap、
       // 阅读档 hydrate 完图还会撑高），所以补第二帧 —— 放在这里而不是 `if (!v)` 之后，
