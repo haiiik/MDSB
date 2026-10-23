@@ -295,9 +295,9 @@ Function .onInit
   ${EndIf}
   ${If} $0 == ""
     MessageBox MB_OK|MB_ICONEXCLAMATION \
-      "没检测到 Microsoft Edge WebView2 运行时。\r$\n\
-       MDStar 的窗口内容靠它渲染，缺了会白屏或起不来。\r$\n\
-       装好的 Edge（版本 120+）通常自带；没有就装一次 Evergreen Runtime 再运行 MDStar。\r$\n\
+      "没检测到 Microsoft Edge WebView2 运行时。$\n\
+       MDStar 的窗口内容靠它渲染，缺了会白屏或起不来。$\n\
+       装好的 Edge（版本 120+）通常自带；没有就装一次 Evergreen Runtime 再运行 MDStar。$\n\
        安装本身会继续，不会因此中止。"
   ${EndIf}
 FunctionEnd
@@ -309,16 +309,43 @@ Section "${APP} 主程序" SecMain
 
   ; 程序还开着时 exe 被占用：先改名（Windows 允许改名被占用的 exe，但不允许覆盖），
   ; 改不动就让她退出后重试 —— 比默默 /REBOOTOK 排到重启后再删干净。
+  ;
+  ; **改名目标必须一个一个试**：上一次留下的 `MDStar.exe.old` 常常删不掉
+  ; （那份旧实例还没死透时 Windows 锁着它的镜像文件），而 `Rename` 在目标已存在时**必定失败** ——
+  ; 老代码把这次失败当成"MDStar 正在运行"，于是她看到"进程列表里根本没有 MDStar，
+  ; 安装却说它在运行"（1.0.1 装不上就是这个）。所以：先删一次残留，删不掉就换 `.old-2`…`.old-6`，
+  ; 六个名字都改不动，才真的是那份 exe 被占着。
   ${If} ${FileExists} "$INSTDIR\${EXE}"
-    rename_old:
+    Delete "$INSTDIR\${EXE}.old"
+    StrCpy $R4 "0"
+    rename_try:
+    IntOp $R4 $R4 + 1
+    ${If} $R4 == 1
+      StrCpy $R5 "$INSTDIR\${EXE}.old"
+    ${Else}
+      StrCpy $R5 "$INSTDIR\${EXE}.old-$R4"
+    ${EndIf}
     ClearErrors
-    Rename "$INSTDIR\${EXE}" "$INSTDIR\${EXE}.old"
+    Rename "$INSTDIR\${EXE}" "$R5"
     IfErrors 0 old_renamed
+      ${If} $R4 < 6
+        Goto rename_try
+      ${EndIf}
       MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION \
-        "检测到 MDStar 正在运行（或有实例没退干净），文件被占用。\r$\n\
-         请先退出 MDStar，再点「重试」。" IDRETRY rename_old
+        "MDStar.exe 改不动 —— 通常是还有 MDStar 窗口（或它的测试版 MDStar-cdp.exe）没退干净。$\n\
+         请先退出所有 MDStar，再点「重试」。$\n\
+         找不到在跑的窗口就点「取消」，然后删掉安装目录里的 MDStar.exe.old*。" IDRETRY rename_reset
       Abort "MDStar 仍在运行，安装已取消。"
+    rename_reset:
+    StrCpy $R4 "0"
+    Goto rename_try
     old_renamed:
+    ; 顺手把更早几次的残留一起清掉（删得掉就删，删不掉不拦安装）
+    Delete "$INSTDIR\${EXE}.old-2"
+    Delete "$INSTDIR\${EXE}.old-3"
+    Delete "$INSTDIR\${EXE}.old-4"
+    Delete "$INSTDIR\${EXE}.old-5"
+    Delete "$INSTDIR\${EXE}.old-6"
   ${EndIf}
 
   SetOutPath "$INSTDIR"
