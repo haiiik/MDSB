@@ -2,13 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 import { freshSession, gotoApp, setMode } from "./mockApp";
 
 /**
- * 146-A：她「mermaid 图新增支持单独缩放，缩放功能放编辑功能右侧」。
+ * 146-A：「mermaid 图新增支持单独缩放，缩放功能放编辑功能右侧」。
  *
  * 三件事必须一起成立：
  * ① 控件在**那颗「编辑源码」的右边**（同一行工具条）；
  * ② 缩放只作用在**这一张图**上（不是整篇 025 那个全局缩放）；
  * ③ 倍率是视图属性，**一个字节都不进文档**（Ctrl+S 之后文件逐字节等于原文）。
- * 另外按她那条「不可用的选项干脆不摆」：到顶 / 到底那一侧的键要 disable。
+ * 另外按那条「不可用的选项干脆不摆」：到顶 / 到底那一侧的键要 disable。
  */
 
 const 边 = Array.from({ length: 16 }, (_, i) => `  n${i} --> n${i + 1}`).join("\n");
@@ -63,7 +63,7 @@ test("缩放控件在「编辑源码」右边，初始 100%", async ({ page }) =
   const s = await 状态(page);
   expect(s.在不在, "Mermaid 块的工具条上没有缩放控件").toBe(true);
   expect(s.文案).toBe("100%");
-  expect(s.在编辑键右边, "控件没放在「编辑源码」右侧（她点名的位置）").toBe(true);
+  expect(s.在编辑键右边, "控件没放在「编辑源码」右侧（点名的位置）").toBe(true);
 });
 
 test("放大两档：图真的变宽，文档一个字节没变", async ({ page }) => {
@@ -113,7 +113,7 @@ test("倍率跟着这张图走：换到阅读档再换回来还是那一档", as
   await setMode(page, "edit");
   await page.waitForSelector(".hp-mermaidbox__svg svg");
   await page.waitForTimeout(400);
-  expect((await 状态(page)).文案, "换一次模式就被打回 100%（她调过的倍率没记住）").toBe("150%");
+  expect((await 状态(page)).文案, "换一次模式就被打回 100%（调过的倍率没记住）").toBe("150%");
 });
 
 test("普通代码块不给缩放控件（缩放的是图，不是文字）", async ({ page }) => {

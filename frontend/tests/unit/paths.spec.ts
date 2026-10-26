@@ -24,7 +24,7 @@ describe("paths", () => {
 
     // 回归：单字母盘符不能被当成 URI scheme —— 桌面端一旦误判，
     // 相对图片整条解析会被跳过，表现为图裂且没有任何网络请求
-    expect(isExternalUrl("C:/Users/han/文档/a.png")).toBe(false);
+    expect(isExternalUrl("C:/Users/demo/文档/a.png")).toBe(false);
     expect(isExternalUrl("D:/a.png")).toBe(false);
     expect(isExternalUrl("file:///C:/a.png")).toBe(true);
   });

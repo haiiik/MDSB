@@ -5,8 +5,8 @@ import { footnoteRefLabel, joinFootnoteDef, splitFootnoteDef } from "../../src/k
  * 136-B 的地基：脚注定义块「拆得开、拼得回一字不差」。
  *
  * 编辑模式的回写是**按块拼原文**，所以只要这条往返性质成立，
- * "只改她动过的那一块"（Q27 她定的口径）就是构造性保证的，不靠事后 diff 兜。
- * 反过来这条一断，整个脚注编辑就会在她看不见的地方改她的文件 —— 所以形态要铺满。
+ * "只改动过的那一块"（Q27 已定的口径）就是构造性保证的，不靠事后 diff 兜。
+ * 反过来这条一断，整个脚注编辑就会在肉眼看不见的地方改盘上那份文件 —— 所以形态要铺满。
  */
 describe("footnoteBlock：定义块拆开 / 拼回", () => {
   const RAW = [
@@ -32,7 +32,7 @@ describe("footnoteBlock：定义块拆开 / 拼回", () => {
     }
   });
 
-  it("正文里不含标记、冒号后空白与续行缩进（她看到的就是能改的那部分）", () => {
+  it("正文里不含标记、冒号后空白与续行缩进（肉眼看到的就是能改的那部分）", () => {
     const p = splitFootnoteDef("[^c]: 第一行\n  两格缩进的续行")!;
     expect(p.label).toBe("c");
     expect(p.gap).toBe(" ");
@@ -52,7 +52,7 @@ describe("footnoteBlock：定义块拆开 / 拼回", () => {
     }
   });
 
-  it("改正文之后按原文缩进拼回（她没碰缩进，我们就不动缩进）", () => {
+  it("改正文之后按原文缩进拼回（没碰缩进，我们就不动缩进）", () => {
     const p = splitFootnoteDef("[^c]: 第一行\n  两格缩进的续行")!;
     p.body = "改过的第一行\n改过的续行";
     expect(joinFootnoteDef(p)).toBe("[^c]: 改过的第一行\n  改过的续行");

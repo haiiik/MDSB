@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { freshSession, gotoApp, setMode } from "./mockApp";
 
 /**
- * 144：她的原话「阅读模式首行与编辑模式对齐」。
+ * 144：原始诉求「阅读模式首行与编辑模式对齐」。
  *
  * 根因是一条选择器在编辑档**没人命中**：
  * `reading.css` 的 `.hp-doc > *:first-child { margin-top: 0 }` 靠「首个块是 .hp-doc 的亲儿子」成立，
@@ -12,7 +12,7 @@ import { freshSession, gotoApp, setMode } from "./mockApp";
  *
  * 判据按几何：量 `.hp-doc` 里**第一个文字节点**的首行顶边，减去 `.hp-doc` 自己的顶边，
  * 两档必须相等。选「第一个文字节点」而不是「第一个块」，是因为两档的块层级本来就不一样，
- * 而"眼睛看到的正文第一行在哪儿"才是她说的那件事。
+ * 而"眼睛看到的正文第一行在哪儿"才是真正要验的那件事。
  *
  * 三种开头都要管：标题、普通段落、以任务清单开头 —— 只修标题那条等于猜。
  */

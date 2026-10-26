@@ -9,7 +9,7 @@
  * 3. **界面文案与判据分离**：断言一律押 `data-testid`，不押中文文本。
  *    这条是本基座存在的真正原因 —— 否则每加一种语言就要重写一批测试。
  *
- * 语言从哪来（她的口径）：**安装时选**（安装器读系统语言预选，读不到则必须选一项才能继续），
+ * 语言从哪来（已定口径）：**安装时选**（安装器读系统语言预选，读不到则必须选一项才能继续），
  * 写进 `HKCU\Software\MDStar\Language`；应用首启若设置里没有语言项就读它，之后**以设置为准**，
  * 设置里只有「中文 / English」双选（不做跟随系统）。
  */
@@ -273,6 +273,14 @@ const en: Record<MsgKey, string> = {
   "mermaid.emptyLabel": "The label can't be empty. To remove this node, edit the source mode.",
   "mermaid.identifierRule": "This is an identifier (type name / attribute name / key marker) — it must be one word without spaces.",
   "mermaid.wouldBreak": 'This text contains a double quote and "{text}", which would end the label early and break the diagram. Please edit it in source mode.',
+  "mermaid.displayOnly": "Change label only",
+  "mermaid.renameButton": "Rename in all {count} places",
+  "mermaid.renameUnsupported": "Identifier rules for this diagram type aren't fully mapped, so nothing was written, to avoid breaking the diagram. Please edit the source below.",
+  "mermaid.renameBadId": '"{name}" can\'t be used as a name: use letters, digits, underscore or Chinese characters, no spaces or brackets.',
+  "mermaid.renameNotFound": 'That name wasn\'t found in the source, so nothing was written. The diagram may have changed elsewhere — double-click it again.',
+  "mermaid.renameClash": '"{name}" is already another name in this diagram; renaming would merge the two. Nothing was written.',
+  "mermaid.aliasBadText": "A display name can't contain a double quote or a line break — it would break the diagram. Rephrase it, or edit in source mode.",
+  "mermaid.aliasViaLabel": "For this diagram type the display name is the node label itself; use \"Change label only\" to edit that text.",
   "math.notLoaded": "Formula renderer isn't loaded yet",
   "opaque.defaultLabel": "(this content isn't modified in edit mode)",
   "opaque.yaml": "Document properties (YAML) · not modified in edit mode",
@@ -291,6 +299,28 @@ const en: Record<MsgKey, string> = {
   "table.toggleHeader": "Set / unset header row",
   "table.deleteRow": "Delete this row",
   "table.deleteColumn": "Delete this column",
+
+  // 154 / 155 / 156：输出（打印、导出 HTML、导出 PDF）
+  "output.export": "Export",
+  "output.exportHint": "Export a single-file HTML, or save as PDF through the system print dialog",
+
+  "output.print": "Print",
+  "output.printHint": "Ctrl+P; paper is always light, without the on-screen buttons",
+  "output.pdf": "Export PDF",
+  "output.pdfHint": "In the print dialog, choose “Microsoft Print to PDF” or “Save as PDF” as the printer",
+  "output.html": "Export HTML",
+  "output.htmlHint": "Single file: images are embedded, so recipients see every picture",
+  "output.mermaidTimeout": "A Mermaid diagram never finished rendering — it may be missing from this output",
+  "output.htmlDone": "HTML exported",
+  "output.htmlPartial": "HTML exported: {ok} images embedded, {bad} couldn't be read (left as their original path)",
+  "output.failed": "Export failed",
+
+  // 157：Callouts 提示块的标题
+  "callout.note": "Note",
+  "callout.tip": "Tip",
+  "callout.important": "Important",
+  "callout.warning": "Warning",
+  "callout.caution": "Caution",
 };
 
 export { en };

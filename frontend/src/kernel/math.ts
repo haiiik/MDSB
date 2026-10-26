@@ -129,7 +129,7 @@ export function renderMath(rt: MathRuntime | null, src: string, display = false)
  * 任何人拿「输出里不许有 `<script`」当安全判据都会在这里误判（我第一次就误判了）。
  * 编码一次之后：值里只剩字母数字与 `%`，判据能写成干净的、并且
  * **将来若有人把阅读模式的 HTML 原样导出/嵌进别的模板，也不用重新论证一次转义**。
- * 代价只是水合时多一次 `decodeURIComponent`，而这份源码从不落盘、不进她文件。
+ * 代价只是水合时多一次 `decodeURIComponent`，而这份源码从不落盘、不进盘上那份文件。
  */
 export function mathPlaceholder(src: string, display: boolean): Element {
   const fence = display ? "$$" : "$";
@@ -148,7 +148,7 @@ export function mathPlaceholder(src: string, display: boolean): Element {
 
 /**
  * 水合失败时的降级节点：**原文仍然可见**，只是标成错误态。
- * 与占位的区别只在类名与 title —— 她至少能看见自己写了什么、并知道为什么没渲出来。
+ * 与占位的区别只在类名与 title —— 至少能看见自己写了什么、并知道为什么没渲出来。
  */
 function mathErrorPlaceholder(src: string, display: boolean, error: string): Element {
   const p = mathPlaceholder(src, display);

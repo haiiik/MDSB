@@ -29,7 +29,7 @@ export function wirePersistence(h: Host) {
   hooks.afterClose = (tab: Tab) => {
     cancelAutoSave(tab.id);
     /*
-     * 127 修的真 bug（她踩到的：「关闭标签时丢弃了未保存内容，再打开程序又提示我发现未保存的内容」）：
+     * 127 修的真 bug（踩到的：「关闭标签时丢弃了未保存内容，再打开程序又提示我发现未保存的内容」）：
      * 原来这里只 `stopSnapshot`（取消还没触发的定时器），**盘上那份快照没删**。
      * 于是「丢弃」只丢了一半 —— 标签关了，008 的崩溃快照还留着，
      * 下次启动 `scanRecoverable()` 一比：快照 ≠ 磁盘 → 又弹「发现未保存的内容」。

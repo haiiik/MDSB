@@ -253,7 +253,7 @@ defineExpose({
     if (命中.length === 0) 命中 = 扫(Math.min(a.键.length, ANCHOR_KEY_SHORT));
     const i = pickAnchorIndex(命中, a.键, near);
     if (i < 0) return false;
-    // 折行的源码行可以比视口还高：块内偏移按行高比例搬过来，才落回她站着的那一行
+    // 折行的源码行可以比视口还高：块内偏移按行高比例搬过来，才落回原来那一行
     view.scrollDOM.scrollTop = anchorScrollTop(命中[i], a);
     return true;
   },

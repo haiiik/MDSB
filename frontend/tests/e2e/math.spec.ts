@@ -57,7 +57,7 @@ test("坏公式降级：原文仍然看得见，且不牵连其它内容与整�
   await expect(err).toHaveCount(1);
   await expect(err).toContainText("\\typeout{x}");
   await expect(err).toHaveClass(/hp-math--error/);
-  // title 里带本地化前缀 + KaTeX 的报错第一句（她鼠标停上去能知道为什么没渲出来）
+  // title 里带本地化前缀 + KaTeX 的报错第一句（鼠标停上去能知道为什么没渲出来）
   const title = await err.getAttribute("title");
   expect(title ?? "").toContain("公式语法错误");
   // 其它内容照常：正文、那条好公式、以及"收尾"两个字都在

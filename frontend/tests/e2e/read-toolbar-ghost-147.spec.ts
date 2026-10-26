@@ -2,11 +2,11 @@ import { expect, test, type Page } from "@playwright/test";
 import { freshSession, gotoApp, setMode } from "./mockApp";
 
 /**
- * 147：她「阅读模式那个地方也应该有个栏，即使空着，也能让阅读模式和编辑模式的初始高度一致」。
+ * 147：「阅读模式那个地方也应该有个栏，即使空着，也能让阅读模式和编辑模式的初始高度一致」。
  *
  * 144 修的是**块内**那 1.6em 上边距；这一条是**容器**那一行：
  * 编辑档顶上有条工具栏，阅读档以前没有，于是同一篇文档切个模式，正文整体上下跳一行。
- * 判据量的就是她真正看到的那件事：**正文第一行在窗口里的绝对 y，两档必须一样**。
+ * 判据量的就是真正看到的那件事：**正文第一行在窗口里的绝对 y，两档必须一样**。
  * （144 那条量的是相对 `.hp-doc` 的位置，看不见这一行 —— 两条各管一半。）
  */
 
@@ -36,9 +36,11 @@ test("两档正文第一行在窗口里的绝对高度一致（阅读档补了�
   await page.getByTestId("tab-open").click();
   await expect(page.getByTestId("document-root")).toBeVisible();
   const 阅 = await 首行绝对y(page);
-  // 那条空栏在阅读档里是看得见的（她要的就是"有个栏"），但没有按钮
+  // 这条栏在阅读档里是看得见的（要求的就是"有个栏"）；
+  // 2026-10-26 起这条栏的左端放着 154/155/156 的入口（「打印」+「导出 ▾」两颗）—— **它们必须与工具栏按钮同高**，
+  // 不然下面那两条"两档首行一样"的判据当场红（那才是这条栏真正守的东西）。
   await expect(page.getByTestId("read-toolbar-ghost")).toBeVisible();
-  expect(await page.getByTestId("read-toolbar-ghost").locator("button").count()).toBe(0);
+  expect(await page.getByTestId("read-toolbar-ghost").locator("button").count()).toBe(2);
 
   await setMode(page, "edit");
   await page.waitForSelector(".ProseMirror");

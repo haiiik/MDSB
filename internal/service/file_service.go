@@ -247,7 +247,7 @@ type MarkdownEntry struct {
 }
 
 const (
-	// 一次扫描的硬上限。**宁可少给几条让她继续输关键词，
+	// 一次扫描的硬上限。**宁可少给几条让人继续输关键词，
 	// 也不能让弹层一打开就卡住界面** —— 一个 node_modules 里就能有几万个 .md。
 	mdScanLimit = 400
 	// 最深下潜几层。再深的目录树通常是归档而不是知识库。
@@ -256,7 +256,7 @@ const (
 
 // skipDirNames 只列**确定不是用户文档**的依赖/版本库目录。
 //
-// 刻意不把 `dist` / `build` / `out` 放进来：这些名字完全可能是她自己叫这个的文档目录，
+// 刻意不把 `dist` / `build` / `out` 放进来：这些名字完全可能是本机就叫这个的文档目录，
 // 静默跳过就会变成"我明明有这份文档，弹层里搜不到"，那比多扫几个目录严重得多。
 var skipDirNames = map[string]bool{"node_modules": true, ".git": true}
 
@@ -266,7 +266,7 @@ var skipDirNames = map[string]bool{"node_modules": true, ".git": true}
 //  1. **不跟随符号链接**（用 WalkDir，天然不跟随），避免环路与越界；
 //  2. 隐藏目录（以 `.` / `_` 开头）与 node_modules/.git 跳过；
 //  3. 单个子目录读不了（权限、被占用）**跳过并继续**，只有根目录本身不可读才报错 ——
-//     扫盘是"给她挑文件"的辅助动作，不该因为一棵树里有一个坏目录就整个失败。
+//     扫盘是"挑文件"的辅助动作，不该因为一棵树里有一个坏目录就整个失败。
 func (s *FileService) ListMarkdown(dir string, limit int) ([]MarkdownEntry, error) {
 	root := strings.TrimSpace(filepath.Clean(dir))
 	if root == "" {

@@ -30,7 +30,7 @@ export type Entry = { kind: "sep" } | { kind: "item"; label: string; command: Co
 
 /**
  * 菜单项。**是函数不是常量**：133 那轮把界面文案收进字典之后，
- * 常量等于「模块第一次 import 时就把语言烘死了」，设置里切成 English 也来不及（她要的是当场生效）。
+ * 常量等于「模块第一次 import 时就把语言烘死了」，设置里切成 English 也来不及（要求的是当场生效）。
  * 菜单每次右键都重建，所以调一次取一次最新语言的标签。
  */
 export function tableMenuEntries(): Entry[] {

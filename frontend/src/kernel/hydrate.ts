@@ -1,5 +1,5 @@
 import type { Host } from "../host/types";
-import { enhanceCodeBlocks, enhanceImages, enhanceToc } from "./enhance";
+import { enhanceCallouts, enhanceCodeBlocks, enhanceImages, enhanceToc } from "./enhance";
 import { hydrateMath } from "./math";
 import { hydrateMermaid } from "./mermaid";
 import { decodeSrc, dirname, isAbsoluteFsPath, isExternalUrl, resolveFsPath } from "./paths";
@@ -22,6 +22,9 @@ export async function hydrate(root: HTMLElement, opts: HydrateOptions): Promise<
   await resolveImages(root, opts);
   enhanceCodeBlocks(root);
   enhanceToc(root);
+  // 157：提示块（`> [!NOTE]`）。排在图片增强之前 —— 提示块里第一段的标记要剥掉，
+  // 而 `enhanceImages` 会给图挂 error 监听，两者碰的是同一批子节点，先做形状再做监听少一类交叉。
+  enhanceCallouts(root);
   enhanceImages(root, opts.host);
   await hydrateMermaid(root, { theme: opts.theme });
   // 138：公式。放最后一步是有意的 —— 它只在文档真有 `$…$` 时才动态取 KaTeX，

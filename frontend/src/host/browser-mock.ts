@@ -225,6 +225,24 @@ export function createBrowserMockHost(): HostBase {
   const startupQueue: string[] = [];
   const now = Date.now();
 
+  /**
+   * 158：桌面上那两个旋钮的值由 `addInitScript` 在页面脚本之前写下，用来复现
+   * 「转交信号 arrives 时前端还没订阅」这个窗口。
+   *
+   * 为什么要在**页面里**造这个窗口，而不是测试那头 `__hpMockEmitStartupFile` 一发：
+   * 挂载到订阅之间只有几个微任务，一次 CDP 往返就是几毫秒 —— 从外面插进去全凭运气，
+   * 红了绿了都说明不了问题。窗口要造在页面内：
+   * - `首次读慢毫秒`：第一次 `readFile` 慢 T 毫秒（桌面上取队列 + 读盘都是 IPC，本来就这么慢）；
+   * - `稍后转交`：在 T 之内把第二个路径入队并广播 —— 此时前端如果还排在
+   *   「先取完队列才订阅」那个顺序上，就没有监听者，这个文件会一直躺在队列里。
+   */
+  const 时序 = (
+    window as unknown as {
+      __hpMockStartupTiming?: { 首次读慢毫秒?: number; 稍后转交?: { 路径: string; 延迟毫秒: number } };
+    }
+  ).__hpMockStartupTiming;
+  let 首次读慢毫秒 = 时序?.首次读慢毫秒 ?? 0;
+
   // 供测试读取的伪窗口/剪贴板状态
   let mockMaximised = false;
   let dragCalls = 0;
@@ -252,6 +270,13 @@ export function createBrowserMockHost(): HostBase {
     },
 
     async readFile(path: string) {
+      // 158：桌面上「取队列」与「读盘」都是 IPC，慢就慢在这里；
+      // 这个旋钮让第一次读盘慢下来，好让测试把「正在开第一个文件时又来了一个」这个窗口造在页面里。
+      if (首次读慢毫秒 > 0) {
+        const t = 首次读慢毫秒;
+        首次读慢毫秒 = 0;
+        await new Promise((r) => setTimeout(r, t));
+      }
       return requireFile(path);
     },
 
@@ -537,6 +562,13 @@ export function createBrowserMockHost(): HostBase {
   // ?file=/demo/欢迎.md 模拟「双击文件启动」
   const param = new URLSearchParams(window.location.search).get("file");
   if (param && files.has(param)) startupQueue.push(param);
+
+  // 158：延迟一会儿再"转交"一个路径 —— 造的是「前端还在开第一个文件，第二个信号到了」这一刻。
+  // 入队这件事本身一定成功（`pushStartup` 里带广播），有没有人接由被测代码的顺序决定。
+  if (时序?.稍后转交) {
+    const { 路径, 延迟毫秒 } = 时序.稍后转交;
+    window.setTimeout(() => pushStartup(路径), 延迟毫秒);
+  }
 
   return host;
 }

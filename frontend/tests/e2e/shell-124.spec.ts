@@ -2,8 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { freshSession, gotoApp, setMode } from "./mockApp";
 
 /**
- * 124：她这轮点的三条 bug + 三条优化的回归钉子。
- * 每条都写成「她看到的那个现象」而不是「我改的那个属性」——
+ * 124：这轮点的三条 bug + 三条优化的回归钉子。
+ * 每条都写成「肉眼看到的那个现象」而不是「我改的那个属性」——
  * 现象级的断言以后被人改坏了会红，属性级的不会。
  */
 
@@ -44,7 +44,7 @@ const CURSOR_Y = 400;
  *
  * 前两版都量「离视口顶边多远」，结果把正常缩放判成漂移：
  * 缩放本来就是围绕一个点把内容摊开，顶边锚住时下方 217px 的元素必然走到 238px（×1.1）。
- * 浏览器自己的 Ctrl+滚轮 锚的是**光标**，所以判据也得锚光标 —— 那才是她说的「内容上下跑」。
+ * 浏览器自己的 Ctrl+滚轮 锚的是**光标**，所以判据也得锚光标 —— 那才是「内容上下跑」这件事。
  */
 const anchorNearCursor = (page: Page, sel: string) =>
   page.evaluate(([s, cy]) => {
@@ -144,7 +144,7 @@ test("Mermaid：长中文标签不裁字，宽图不压扁", async ({ page }) =>
       换行: getComputedStyle(svg.querySelector(".nodeLabel")!).whiteSpace,
     };
   });
-  // 压扁比 1 = 按真实尺寸画（超宽交给容器横向滚动），小于 1 就是她看到的「字糊掉」
+  // 压扁比 1 = 按真实尺寸画（超宽交给容器横向滚动），小于 1 就是肉眼看到的「字糊掉」
   expect(Math.abs(r.压扁比 - 1)).toBeLessThan(0.06);
   expect(r.换行).toBe("normal");
   expect(r.裁切节点数).toBe(0);

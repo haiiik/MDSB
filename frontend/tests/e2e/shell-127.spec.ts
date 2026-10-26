@@ -4,13 +4,13 @@ import { freshSession, gotoApp } from "./mockApp";
 /**
  * 127 外壳改造：主题开关从设置里挪到标签栏齿轮右侧。
  *
- * 她这句话里有两个可判定的点，各自钉住：
+ * 这句话里有两个可判定的点，各自钉住：
  * ① 「放到设置右侧」→ 开关必须在齿轮**右手边**（比 x 坐标）；
  * ② 「右侧与上方的关闭按钮对齐，注意是视觉效果对齐」→ 用 boundingBox 量右缘，
  *    差值按 1px 收。不看截图猜「差不多对齐」。
  */
 
-test("标签栏那一组三个键尺寸一致（她：图标要和旁边的大小一致）", async ({ page }) => {
+test("标签栏那一组三个键尺寸一致（要求：图标要和旁边的大小一致）", async ({ page }) => {
   await gotoApp(page);
 
   const 盒 = {} as Record<string, { width: number; height: number; x: number }>;
@@ -98,7 +98,7 @@ test("「最近 / 导航」页签：图标 + 文字 + 下划线，尺寸与这�
   for (const testid of ["page-recent", "page-outline"]) {
     const b = (await page.getByTestId(testid).boundingBox())!;
     // 127 第二批：页签改成下划线式，整颗顶满这一行，不再是行里的一颗小药丸；
-    // **129 把这一行收到 32px**（她也要求顶栏收窄），所以这里补一条上限 —— 退回 40 要红。
+    // **129 把这一行收到 32px**（也要求顶栏收窄），所以这里补一条上限 —— 退回 40 要红。
     expect(b.height).toBeGreaterThanOrEqual(30);
     expect(b.height).toBeLessThanOrEqual(34);
     expect(b.width).toBeGreaterThanOrEqual(80);

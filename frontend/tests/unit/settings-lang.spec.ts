@@ -5,7 +5,7 @@ import { resolveInitialLang, type Settings } from "../../src/state/settings";
  * 首启语言那条链的判据（135）：
  * 存过的值 > 安装器那一页选的值 > 中文。
  * 三条各验一遍，尤其"用户在设置里改过之后，装的时候选什么都不作数"这一条 ——
- * 她定的口径是「设置里可切，且切过一次就以它为准」。
+ * 已定的口径是「设置里可切，且切过一次就以它为准」。
  */
 describe("resolveInitialLang：安装期语言 → 首启初值", () => {
   const stored = (lang?: string): Partial<Settings> => (lang === undefined ? {} : { lang });

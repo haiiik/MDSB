@@ -21,7 +21,7 @@ import * as $models from "./models.js";
  *  1. **不跟随符号链接**（用 WalkDir，天然不跟随），避免环路与越界；
  *  2. 隐藏目录（以 `.` / `_` 开头）与 node_modules/.git 跳过；
  *  3. 单个子目录读不了（权限、被占用）**跳过并继续**，只有根目录本身不可读才报错 ——
- *     扫盘是"给她挑文件"的辅助动作，不该因为一棵树里有一个坏目录就整个失败。
+ *     扫盘是"挑文件"的辅助动作，不该因为一棵树里有一个坏目录就整个失败。
  */
 export function ListMarkdown(dir: string, limit: number): $CancellablePromise<$models.MarkdownEntry[]> {
     return $Call.ByID(1810937887, dir, limit).then(($result: any) => {

@@ -23,6 +23,7 @@ import { perf } from "../kernel/perf";
 import { jumpToHeading, registerReadView, setHeadingJumper, syncActiveHeading } from "../state/viewport";
 import { makeDomAdapter } from "../kernel/searchDom";
 import SearchBar from "./SearchBar.vue";
+import OutputActions from "./OutputActions.vue";
 import {
   closeSearch,
   openSearch,
@@ -193,8 +194,8 @@ function restoreScroll(mode: Mode) {
   /*
    * 146：查找条开着且有当前项时，**位置由那一处说了算**。
    * 换档那一刻新适配器注册会自己把当前项滚进视野（`apply(..., reveal=true)`），
-   * 这时再按「视口顶端那一段」的锚点落一次，就把她正看着的那一带推出了视野 ——
-   * 她的原话：「查找功能查找后，切换模式时，显示位置发生变化了」。
+   * 这时再按「视口顶端那一段」的锚点落一次，就把正看着的那一带推出了视野 ——
+   * 原始诉求：「查找功能查找后，切换模式时，显示位置发生变化了」。
    * 140 那套锚点管的是"没开查找时换档落在同一段"，两件事不冲突：查找条一关就恢复走锚点。
    */
   if (searchState.open && searchState.current >= 0 && scrollerOf(mode)) {
@@ -322,7 +323,7 @@ function attachEditScroll() {
  * 为什么要记这个：**缩放、正文宽度、基准字号都只是 `.hp-doc` 上的 CSS**，
  * 改它们却走一遍 `mountRender`（重新 `mdToHtml` 解析 + 整块换 DOM），
  * 既白付 ~150ms（94KB 文档实测），更要命的是换 DOM 那一瞬滚动位置会被夹掉 ——
- * 她报的「按住 Ctrl 滚轮缩放时内容上下移动」根因就在这儿，不在补偿公式上。
+ * 报的「按住 Ctrl 滚轮缩放时内容上下移动」根因就在这儿，不在补偿公式上。
  * 所以内容身份没变时只改样式，DOM 一个节点都不换。
  */
 let renderedKey = "";
@@ -333,7 +334,7 @@ function patchReadStyles(zoom: number, width: WidthPreset): boolean {
   if (!el) return false;
   el.style.zoom = String(clampZoom(zoom));
   el.dataset.width = width;
-  // 130：阅读档**不再吃「基础字号」** —— 她指出那颗与缩放重复，已从设置里删掉，
+  // 130：阅读档**不再吃「基础字号」** —— 指出那颗与缩放重复，已从设置里删掉，
   // 字号改成编辑工具栏里的一颗、只作用编辑档。阅读档回到 CSS 默认（`reading.css` 的 15px）。
   return true;
 }
@@ -439,7 +440,7 @@ watch(edit, (el) => {
  *
  * 142 把条件里的「未命名」去掉了：**打开一篇空文件是同一条路径**。
  * 桌面与浏览器实测都一样 —— 底栏那颗「编辑」按钮点完焦点还在按钮上，
- * 空档里第一个字打不出去，而她接着按 Enter / Tab 会**把模式按钮再点一次**（模式当场跳走）。
+ * 空档里第一个字打不出去，而接着按 Enter / Tab 会**把模式按钮再点一次**（模式当场跳走）。
  */
 function focusEmptyDoc(tries = 12): void {
   const t = activeTab.value;
@@ -494,13 +495,13 @@ function activeScroller(): HTMLElement | null {
 }
 
 /**
- * Ctrl + 滚轮 = 本篇缩放（018）。三件事都得做，少一件就是她报的那个现象：
+ * Ctrl + 滚轮 = 本篇缩放（018）。三件事都得做，少一件就是报来的那个现象：
  *
  * ① **接管三种模式**。原来这个监听只挂在阅读模式的滚动容器上，
  *    编辑/源码里 Ctrl+滚轮 直接落到 WebView2 的整页缩放 ——
  *    状态栏百分比没动、画面却变了，两边对不上。
  * ② **preventDefault**。那一下同时掐掉原生滚动和浏览器整页缩放。
- *    她怀疑的「同时触发了上下滑动和缩放」，实际是下面这条造成的视觉位移，不是两条滚动逻辑打架。
+ *    怀疑的「同时触发了上下滑动和缩放」，实际是下面这条造成的视觉位移，不是两条滚动逻辑打架。
  * ③ **缩放后按比例补偿滚动位置，而且必须先写进标签再改 zoom**。
  *    `zoom` 改的是布局高度，`scrollTop` 数值不变 = 视口顶端锚在别的内容上，看着就是内容上下跑。
  *    关键是**顺序**：阅读模式改 zoom 会整块重渲染，重渲染之后那次 `restoreScroll`
@@ -530,7 +531,7 @@ function onWheel(e: WheelEvent) {
    *
    * 我第一版写的是 `scrollTop *= 新/旧`（等价于锚住视口顶边），真壳实测被判据抓出来不对：
    * 顶边锚住时，光标下方 217px 的元素按 1.1 倍必然走到 238px ——
-   * 那是缩放本身的定义（越靠下摊得越开），可她看到的就是「内容上下移动」。
+   * 那是缩放本身的定义（越靠下摊得越开），可肉眼看到的就是「内容上下移动」。
    * 设视口顶边的内容坐标为 C_top = scrollTop / zoom，光标处的内容坐标
    * C_cursor = (scrollTop + y) / zoom；要它缩放前后不变，就得
    * scrollTop' = C_cursor × zoom' − y = (scrollTop + y) × 比值 − y。
@@ -552,7 +553,7 @@ function onWheel(e: WheelEvent) {
     <!-- 118：查找条浮在本篇正文右上角，三种模式共用同一个实例 -->
     <SearchBar />
     <!--
-      127：错误提示要能自己关掉（她：「做个叉放右边，点击关闭当前这个错误提示」）。
+ 127：错误提示要能自己关掉（要求：「做个叉放右边，点击关闭当前这个错误提示」）。
       关掉只清**当前这一条**：下一次真出错照样会显示，不是把提示机制哑掉。
     -->
     <div v-if="currentError" class="pane__error" data-testid="open-error">
@@ -572,7 +573,7 @@ function onWheel(e: WheelEvent) {
     <div v-if="!activeTab" class="pane__empty">
       <h2 class="pane__title">{{ t("empty.noDoc") }}</h2>
       <!--
-        127：空态页给**两颗**按钮。她这句话里「新增一个创建按钮」是要在这张页上有个入口，
+ 127：空态页给**两颗**按钮。这句话里「新增一个创建按钮」是要在这张页上有个入口，
         而标签栏那颗 + 已经改成「新增标签」了 —— 两条路都调同一个 `createUntitled`，
         行为（含「复用没动过的空标签」）不会走岔。
       -->
@@ -589,15 +590,17 @@ function onWheel(e: WheelEvent) {
     <!-- 阅读模式 -->
     <template v-else-if="activeTab.mode === 'read'">
       <!--
-        147（她：「阅读模式那个地方也应该有个栏，即使空着，也能让阅读模式和编辑模式的
+ 147（要求：「阅读模式那个地方也应该有个栏，即使空着，也能让阅读模式和编辑模式的
         初始高度一致」）：编辑档顶上那条工具栏占一行，阅读档以前没有这一行，
         于是同一篇文档切个模式，正文整体上下跳一行（144 修的是块内上边距，这一行是容器偏移，两回事）。
-        这里补一条**同高但是空的**栏：盒模型（内边距 / 下框线 / 底色 / 字号）与编辑档那条
-        取自同一批 `:root` 变量，里面再放一个与工具栏按钮同尺寸的占位元素 ——
-        不是硬写一个 px 数，硬写的数在字号或内边距一改之后就会悄悄对不上，两档又开始跳。
+        这里补一条**同高的**栏：盒模型（内边距 / 下框线 / 底色 / 字号）与编辑档那条
+        取自同一批 `:root` 变量，里面的按钮与工具栏按钮同一个盒子（同样的上下内边距 + 1px 边框 + 同一行高），
+        所以两边的高度都由"字体 + 行高 + 内边距 + 边框"算出来，不是硬写一个 px 数。
+        2026-10-26 起这条栏不再是空的：右端放 154/155/156 三颗动作（打印 / 导出 HTML / 导出 PDF），
+        位置就按截图圈的那一条。
       -->
-      <div class="edit-toolbar edit-toolbar--ghost" aria-hidden="true" data-testid="read-toolbar-ghost">
-        <span class="edit-toolbar__sizer">&nbsp;</span>
+      <div class="edit-toolbar edit-toolbar--ghost" data-testid="read-toolbar-ghost">
+        <OutputActions />
       </div>
       <div
         ref="readScroller"
@@ -700,7 +703,7 @@ function onWheel(e: WheelEvent) {
   font-size: 13px;
 }
 
-/* 关闭这条提示的叉：靠右放（她的要求），尺寸够点但不抢正文 */
+/* 关闭这条提示的叉：靠右放（要求），尺寸够点但不抢正文 */
 .pane__error-close {
   margin-left: auto;
   flex: 0 0 auto;
@@ -722,12 +725,12 @@ function onWheel(e: WheelEvent) {
 }
 
 /*
- * 147：阅读档那条"空栏"。盒模型与编辑档的 `.edit-toolbar` 逐项一致，
+ * 147：阅读档顶上那条栏。盒模型与编辑档的 `.edit-toolbar` 逐项一致，
  * 尺寸全部取自 :root 那批变量（两档同一份来源，改一处两边跟着走）。
- * 里面的 `.edit-toolbar__sizer` 与工具栏按钮同一个盒子（同样的上下内边距 + 1px 透明边框 + 同一行高），
- * 只是里面只有一个不换行的空格 —— **必须是真空格**：空的 `<span>` 没有行盒，
- * 行高对它不起作用，那条栏会矮一截（实测差 16px，两档照样跳）。
- * 这样两边的高度都由"字体 + 行高 + 内边距 + 边框"算出来，不是硬写一个 px 数。
+ * 栏里的三颗动作（`OutputActions.vue`）用的是与工具栏按钮同一批内边距 / 边框 / 行高，
+ * 所以两边的高度都由"字体 + 行高 + 内边距 + 边框"算出来，不是硬写一个 px 数。
+ * （以前这里是一个 `.edit-toolbar__sizer` 空格占位元素 —— 2026-10-26 那条栏放上了动作，占位不再需要。
+ *  留个记录：占位时期踩过"空 `<span>` 没有行盒、行高不起作用、那条栏矮 16px"的坑。）
  */
 .edit-toolbar--ghost {
   display: flex;
@@ -740,13 +743,6 @@ function onWheel(e: WheelEvent) {
   font-size: var(--hp-toolbar-font);
   /* 与编辑档那条工具栏同一个行高来源（写在容器上，理由见 EditToolbar.vue 那条注释） */
   line-height: var(--hp-toolbar-line);
-}
-
-.edit-toolbar__sizer {
-  min-width: 0;
-  padding: var(--hp-toolbar-btn-pad-y) var(--hp-toolbar-btn-pad-x);
-  border: 1px solid transparent;
-  border-radius: 4px;
 }
 
 .pane__scroller {

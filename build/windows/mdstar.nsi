@@ -11,15 +11,15 @@
 ;    `go build -X mdsb/internal/service.version=`（设置对话框那行「MDStar v…」读它），
 ;    又喂给这里的 VERSION / VIProductVersion。分开写会出现「包是 0.1.0、界面是 0.1.0-dev」。
 ; 2. **.md 关联**：主程序段给五个扩展名各登记一份 ProgId（`MDStar.md` / `MDStar.markdown` / …）
-;    + 进「打开方式」+ 写 `Capabilities`/`RegisteredApplications`（让她能在系统「默认应用」里选到我们）。
-;    **接管默认值是第三个可选段，默认勾上**（131 她定的「默认关联格式要默认选中」），
+;    + 进「打开方式」+ 写 `Capabilities`/`RegisteredApplications`（让使用者能在系统「默认应用」里选到我们）。
+;    **接管默认值是第三个可选段，默认勾上**（131 已定的「默认关联格式要默认选中」），
 ;    接管时**先备份原默认值与 UserChoice、卸载按备份还原**。
 ;    为什么必须动 `UserChoice`：Win10/11 里它的优先级**高于**扩展名默认值，且带系统算的哈希、
-;    脚本伪造不了 —— 她实测到的「勾了接管、双击 .md 却弹『你要用哪个应用打开』」就是
+;    脚本伪造不了 —— 实测到的「勾了接管、双击 .md 却弹『你要用哪个应用打开』」就是
 ;    一条指向早已卸载应用的旧 UserChoice 压住了我们写的值。合规做法只有清掉它（并留备份），
-;    或让她自己在系统「默认应用」里点一次（那会生成一条合法的新 UserChoice）。
-; 3. **卸载默认不动她的数据**：%APPDATA%\mdsb（设置、最近列表、置顶）只有在卸载向导里
-;    明确勾那一格才删；旧目录 %APPDATA%\horseparty 任何情况都不碰（她的迁移前备份）。
+;    或由使用者自己在系统「默认应用」里点一次（那会生成一条合法的新 UserChoice）。
+; 3. **卸载默认不动用户数据**：%APPDATA%\mdsb（设置、最近列表、置顶）只有在卸载向导里
+;    明确勾那一格才删；旧目录 %APPDATA%\horseparty 任何情况都不碰（迁移前备份）。
 
 Unicode true
 
@@ -54,7 +54,7 @@ Unicode true
 !define APPPATHS "Software\Microsoft\Windows\CurrentVersion\App Paths\${EXE}"
 ; 应用「能力声明」的位置：`RegisteredApplications` 指到这里，Windows 才会把 MDStar
 ; 列进「设置 > 应用 > 默认应用 > 按文件选择默认值」，也让外壳认这套关联是正经应用登记的
-; （131 她实测：只写扩展名默认值时 `.markdown` 双击仍弹「你要用哪个应用打开」）。
+; （131 实测：只写扩展名默认值时 `.markdown` 双击仍弹「你要用哪个应用打开」）。
 !define CAPKEY   "Software\Clients\${APP}"
 
 ; ---------------- 每个扩展名一份 ProgId（`MDStar.md` / `MDStar.markdown` / …） ----------------
@@ -83,7 +83,7 @@ Unicode true
 ; 1) **先备份原默认值**（空值记 `__none__`，卸载时按它还原）；
 ; 2) 写我们的 ProgId；
 ; 3) **清掉 `FileExts\<ext>\UserChoice`**（也先备份 ProgId + Hash）。
-;    第 3 步是 131 她实测出来的必需动作：UserChoice 的优先级**高于**这里写的扩展名默认值，
+;    第 3 步是 131 实测出来的必需动作：UserChoice 的优先级**高于**这里写的扩展名默认值，
 ;    而且带 Windows 算的哈希、脚本伪造不了 —— 表现就是「勾了接管、双击却弹选择应用」，
 ;    因为那条 UserChoice 指向的应用早就没了。合规做法只有**清掉它**让外壳回落到默认值，
 ;    卸载时再按备份写回去。
@@ -104,7 +104,7 @@ Unicode true
       ; **已经指向我们就不动它**：这条哈希是系统算的、有效的，删了等于把一条能用的关联
       ; 退回给外壳重新解析（Win11 对「只写扩展名默认值」并不总是认，实测 `.markdown` 就还弹选择应用）。
     ${Else}
-      ; 指向别的应用（或指向一个早就被卸掉的应用 = 她实测到的那个弹窗）→ 备份后清掉，
+      ; 指向别的应用（或指向一个早就被卸掉的应用 = 实测到的那个弹窗）→ 备份后清掉，
       ; 让外壳回落到我们写的默认值。卸载时按备份原样还回去。
       WriteRegStr HKCU "${REGKEY}\UserChoiceBackup\${EXT}" "ProgId" $1
       WriteRegStr HKCU "${REGKEY}\UserChoiceBackup\${EXT}" "Hash" $2
@@ -114,7 +114,7 @@ Unicode true
 !macroend
 
 ; 卸载时还原：扩展名默认值按 AssocBackup 写回；UserChoice 只有**在它指向的 ProgId 现在
-; 还能解析出 open\command** 时才写回（她原来那条很可能指向早已卸载的应用 ——
+; 还能解析出 open\command** 时才写回（原来那条很可能指向早已卸载的应用 ——
 ; 那正是当初要弹选择应用的原因，原样还回去等于把坏状态再种一次）。
 !macro RestoreExt EXT
   ReadRegStr $0 HKCU "${REGKEY}\AssocBackup" "${EXT}"
@@ -168,7 +168,7 @@ VIAddVersionKey /LANG=2052 "Comments" "当前用户安装；.md 关联只写 HKC
 ; 安装包与卸载器的图标用**带文档的那版**（`mdstar-file.ico`：每一档都留着纸页）。
 ; 不用 `mdstar.ico` —— 那份的 sm 档（≤32px）按母版规则退回不带文档的实心星，
 ; 而资源管理器里 setup.exe 正是按 32/48px 画的，于是「安装包上没有文档」。
-; 她 131 追加：「安装包图标也要带文档的星星」。
+; 131 追加：「安装包图标也要带文档的星星」。
 !define MUI_ICON   "${BRANDDIR}\mdstar-file.ico"
 !define MUI_UNICON "${BRANDDIR}\mdstar-file.ico"
 !define MUI_ABORTWARNING
@@ -178,7 +178,7 @@ VIAddVersionKey /LANG=2052 "Comments" "当前用户安装；.md 关联只写 HKC
 !define MUI_COMPONENTSPAGE_SMALLDESC
 
 !insertmacro MUI_PAGE_WELCOME
-; ---------------- 安装期选界面语言（131 追加，她定的口径） ----------------
+; ---------------- 安装期选界面语言（131 追加，已定的口径） ----------------
 ; 读系统 UI 语言做预选；**读不到 / 不认识 → 不给默认值，必须选一项才能继续**。
 ; 装完写 HKCU\Software\MDStar\Language = zh|en，应用首启拿它当 settings.lang 的初值。
 !define LANGREGKEY "Software\${APP}"
@@ -211,7 +211,7 @@ Function LangPageCreate
   ; 于是原来的 `${If} $1 == 0x0804` 全部落空 → 两颗单选都不选 → LEAVE 拦住不让下一步，
   ; 表现就是"语言页有但选不了/没预选"。同一个函数在 **kernel32** 的导出里能拿到（2052）。
   ; 再兜一层：读 `HKCU\Control Panel\International\LocaleName`（本机实测 zh-CN）。
-  ; 两条都拿不到 → 什么都不预选，交给 LEAVE 拦住（她定的口径：读不到必须自己选）。
+  ; 两条都拿不到 → 什么都不预选，交给 LEAVE 拦住（已定的口径：读不到必须自己选）。
   StrCpy $LangChosen ""
   System::Call 'kernel32::GetUserDefaultUILanguage()i.r1'
   ${If} $1 != error
@@ -243,7 +243,7 @@ Function LangPageCreate
   ; 少了它：函数照常执行、控件照常创建（在控件树里能查到，只是全被隐藏），
   ; 但 NSIS 认为这一页没内容 → **静默跳过**，欢迎页的下一步直接到目录页，
   ; LEAVE 也不会被调用。编译期零警告零报错，所以 131 第一轮"编译通过"完全没挡住它。
-  ; 她实测反馈「第二页没有语言选项」→ 控件树走查 → 最小复现 → 补上这一行才修好。
+  ; 实测反馈「第二页没有语言选项」→ 控件树走查 → 最小复现 → 补上这一行才修好。
   nsDialogs::Show
 FunctionEnd
 
@@ -282,7 +282,7 @@ LangString DESC_SecUnState ${LANG_SIMPCHINESE} "同时删除设置、最近列�
 
 ; 组件说明（MUI_DESCRIPTION_TEXT 要押 section 的 id 常量，那些常量在 Section 编译后才存在，
 ; 所以两块说明写在**文件末尾**，不是随手放的 —— 写在前面会报 warning 6000 unknown variable，
-; 结果是组件页只有名字没有描述，她看不出第二、三格是干什么的）。
+; 结果是组件页只有名字没有描述，看不出第二、三格是干什么的）。
 
 Function .onInit
   ; 当前用户作用域：Shell Folder（桌面 / 开始菜单 / APPDATA）一律取 current，
@@ -308,11 +308,11 @@ Section "${APP} 主程序" SecMain
   SectionIn RO
 
   ; 程序还开着时 exe 被占用：先改名（Windows 允许改名被占用的 exe，但不允许覆盖），
-  ; 改不动就让她退出后重试 —— 比默默 /REBOOTOK 排到重启后再删干净。
+  ; 改不动就等应用退出后重试 —— 比默默 /REBOOTOK 排到重启后再删干净。
   ;
   ; **改名目标必须一个一个试**：上一次留下的 `MDStar.exe.old` 常常删不掉
   ; （那份旧实例还没死透时 Windows 锁着它的镜像文件），而 `Rename` 在目标已存在时**必定失败** ——
-  ; 老代码把这次失败当成"MDStar 正在运行"，于是她看到"进程列表里根本没有 MDStar，
+  ; 老代码把这次失败当成"MDStar 正在运行"，于是肉眼看到"进程列表里根本没有 MDStar，
   ; 安装却说它在运行"（1.0.1 装不上就是这个）。所以：先删一次残留，删不掉就换 `.old-2`…`.old-6`，
   ; 六个名字都改不动，才真的是那份 exe 被占着。
   ${If} ${FileExists} "$INSTDIR\${EXE}"
@@ -366,7 +366,7 @@ Section "${APP} 主程序" SecMain
   !insertmacro RegisterExt ".mkdn"     "${APP} Markdown 文档"
 
   ; 能力声明 + 注册为「已注册应用」：让 MDStar 出现在「设置 > 应用 > 默认应用」的列表里，
-  ; 也让她能在系统界面里手工把 .md 指过来（UserChoice 只能由系统/用户写，脚本伪造不了）
+  ; 也让使用者能在系统界面里手工把 .md 指过来（UserChoice 只能由系统/用户写，脚本伪造不了）
   WriteRegStr HKCU "${CAPKEY}"            ""                "${APP}"
   WriteRegStr HKCU "${CAPKEY}\Capabilities" "ApplicationName" "${APP}"
   WriteRegStr HKCU "${CAPKEY}\Capabilities" "ApplicationDescription" "${APP} - Markdown Star Browser"
@@ -408,7 +408,7 @@ Section "创建桌面快捷方式" SecDesktop
 SectionEnd
 
 Section "把 .md / .markdown 的默认打开方式设为 MDStar" SecDefault
-  ; **默认勾上**（131 她定的：「默认关联格式要默认选中」）。不想接管就在组件页取消勾选。
+  ; **默认勾上**（131 已定的：「默认关联格式要默认选中」）。不想接管就在组件页取消勾选。
   ; 只接管这两个常用的；.mdown / .mkd / .mkdn 只在「打开方式」里可选。
   !insertmacro TakeOverExt ".md"
   !insertmacro TakeOverExt ".markdown"

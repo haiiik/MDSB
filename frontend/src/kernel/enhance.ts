@@ -1,5 +1,5 @@
 import type { Host } from "../host/types";
-import { t, tf } from "../i18n";
+import { t, tf, type MsgKey } from "../i18n";
 import { settings } from "../state/settings";
 
 /**
@@ -91,7 +91,7 @@ async function copyText(text: string): Promise<boolean> {
 }
 
 /**
- * 127：给一条错误提示挂「关闭」的叉（她：「做个叉放右边，点击关闭当前这个错误提示」）。
+ * 127：给一条错误提示挂「关闭」的叉（要求：「做个叉放右边，点击关闭当前这个错误提示」）。
  *
  * 只关**当前这一条**，不是把提示机制哑掉：下一次渲染、下一张坏图照样会报。
  *
@@ -198,12 +198,85 @@ export function enhanceToc(root: HTMLElement): number {
 }
 
 /**
+ * 157：GFM 提示块（`> [!NOTE] …` 那一族，GitHub / Typora 都认）。
+ *
+ * **只在阅读档的 DOM 上做**，源码一个字节不改、编辑档不认（已定口径：这一颗只做阅读档渲染）。
+ * 于是三条约束是跟着来的：
+ * - 转换必须**幂等**：换主题、换缩放、换宽度都会重跑 hydrate，标记可重复命中的话
+ *   同一块会套出第二层标题。这里靠「已经有 `.hp-callout` 就跳过」+「标记已被剥掉」双保险；
+ * - **认五种，不认的原样留着**：`> [!FOO]` 不是提示块，那是一个内容里真写了方括号的引用。
+ *   猜成"未知类型也给个底色"会让人以为软件认这种语法，然后他的 `[!X]` 在 GitHub 上却是纯文本；
+ * - 剥标记时要顾及 `[!NOTE]` **和正文挤在同一段**的情形（`>` 里换行在 remark 里是软换行，
+ *   不会拆成两段），所以不是"第一段等于标记就删掉第一段"那么简单。
+ */
+const CALLOUT_TYPES = ["note", "tip", "important", "warning", "caution"] as const;
+export type CalloutType = (typeof CALLOUT_TYPES)[number];
+
+/** `[!NOTE]` 必须在段首；后面紧跟的空白（含软换行）一起吃掉，那是标记的一部分不是正文 */
+const CALLOUT_RE = /^(\s*)\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](\s*)/i;
+
+/** 五种图标：一律矢量（已定过「界面可缩放标记一律矢量」，50%~200% 缩放不许糊） */
+const CALLOUT_ICONS: Record<CalloutType, string> = {
+  note: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.1v3.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/><circle cx="8" cy="4.7" r="0.95" fill="currentColor"/></svg>',
+  tip: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 2.1c-2 0-3.6 1.5-3.6 3.5 0 1.4.8 2.1 1.2 2.9.3.6.4 1 .5 1.5h3.8c.1-.5.2-.9.5-1.5.4-.8 1.2-1.5 1.2-2.9 0-2-1.6-3.5-3.6-3.5Z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.3 12.5h3.4M6.9 14.1h2.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>',
+  important:
+    '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 1.7 14.3 8 8 14.3 1.7 8Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 4.7v3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><circle cx="8" cy="10.6" r="0.9" fill="currentColor"/></svg>',
+  warning:
+    '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 1.9 14.7 13.4H1.3Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 5.9v3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><circle cx="8" cy="11.2" r="0.9" fill="currentColor"/></svg>',
+  caution:
+    '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5.2 1.9h5.6L14.1 5.2v5.6L10.8 14.1H5.2L1.9 10.8V5.2Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 4.8v3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><circle cx="8" cy="10.7" r="0.9" fill="currentColor"/></svg>',
+};
+
+export function enhanceCallouts(root: HTMLElement): number {
+  let done = 0;
+  for (const bq of Array.from(root.querySelectorAll<HTMLElement>("blockquote"))) {
+    if (bq.classList.contains("hp-callout")) continue; // 幂等：重跑 hydrate 不套第二层
+    const first = bq.firstElementChild;
+    if (!first || first.tagName !== "P") continue;
+    const text = first.textContent ?? "";
+    const m = CALLOUT_RE.exec(text);
+    if (!m) continue;
+    const type = m[2].toLowerCase() as CalloutType;
+
+    // 剩下的正文可能还在同一段里（`> [!NOTE]` 下一行是正文 → remark 给的是一个软换行）。
+    // `m[0]` 已经把标记连同前后空白一起吃了，所以切在它后面就是切在正文开头。
+    const 剩正文 = text.slice(m[0].length);
+    if (first.childElementCount === 0) {
+      if (剩正文) first.textContent = 剩正文;
+      else first.remove();
+    } else {
+      // 段里有行内元素：只从头一个文字节点剥标记，后面那些的排版一律不动
+      const tn = Array.from(first.childNodes).find(
+        // 谓词体里 `n` 还是 `ChildNode`（收窄只在返回 true 之后生效），所以这里读 textContent
+        (n): n is Text => n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").trim() !== ""
+      );
+      if (tn) tn.data = tn.data.replace(CALLOUT_RE, "");
+      if (!(first.textContent ?? "").trim()) first.remove();
+    }
+
+    bq.classList.add("hp-callout", "hp-callout--" + type);
+    bq.dataset.callout = type;
+    const title = document.createElement("div");
+    title.className = "hp-callout__title";
+    // 这个 innerHTML 是我们自己画的图标字符串，不掺任何文档内容（没有 XSS 面）
+    title.innerHTML = CALLOUT_ICONS[type];
+    const name = document.createElement("span");
+    // 标题走字典：`callout.note` 这类 key 由 `type` 拼出来，编译期靠 MsgKey 兜住拼错
+    name.textContent = t(("callout." + type) as MsgKey);
+    title.append(name);
+    bq.prepend(title);
+    done++;
+  }
+  return done;
+}
+
+/**
  * 灯箱：滚轮缩放、拖拽平移、Esc/遮罩关闭、一键回到适应尺寸。
  *
- * 127 把它从「只能装 `<img>`」改成能装任意节点 —— 她要的「大图（应用架构图那种）单独缩放」
+ * 127 把它从「只能装 `<img>`」改成能装任意节点 —— 要求的「大图（应用架构图那种）单独缩放」
  * 走的就是这条路：**点开大图里缩放 + 平移**，而不是在正文里给每张图加一套手势。
  * 理由说清楚：正文里 `Ctrl+滚轮` 已经是「整篇缩放」，再让「鼠标停在图上时滚轮只缩放这张」
- * 就成了同一个手势两种含义，得靠角标之类的反馈才不歧义；而她的原话诉求是「无法看到全貌」，
+ * 就成了同一个手势两种含义，得靠角标之类的反馈才不歧义；而最初那句诉求是「无法看到全貌」，
  * 看全貌对症的是**一块没有正文干扰的画布**，就地缩放只能看清局部（缩到能看全貌时字就糊了）。
  */
 interface LightboxSpec {
@@ -223,7 +296,7 @@ interface LightboxSpec {
   /**
    * 149-D：**哪些键按住算平移**（`PointerEvent.button`：0 左、2 右）。
    *
-   * 她 10-22 原话「mermaid 图上只是右键按住滑动」，随后更正：「打错字了，是**支持**右键按住」——
+   * 10-22 原话「mermaid 图上只是右键按住滑动」，随后更正：「打错字了，是**支持**右键按住」——
    * 所以左键照旧能拖，右键是**加**进来的那条路，不是换掉。
    * 为什么值得加：大图里那些字是 SVG 里的真文字，左键按住拖会顺手**选中一片字**
    * （蓝糊糊的笔画盖在图上），想干净地挪图时右键没有这个副作用。
@@ -290,7 +363,7 @@ function showInLightbox(spec: LightboxSpec): void {
      * 右键这条路要多做两件事，少一件都平移不动：
      * ① `preventDefault` —— 不挡掉默认动作，右键按下会在 SVG 上起一段选区；
      * ② 接住 `contextmenu`（下面）—— 不接住的话松手那一刻弹系统菜单，灯箱被顶到后台。
-     * 左键**不挡**：那是原来的行为，按住拖顺手、要选字也还选得了（她更正过口径，别动它）。
+     * 左键**不挡**：那是原来的行为，按住拖顺手、要选字也还选得了（更正过口径，别动它）。
      */
     if (键 !== 0) e.preventDefault();
     dragging = true;

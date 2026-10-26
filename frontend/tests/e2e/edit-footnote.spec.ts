@@ -4,8 +4,8 @@ import { gotoApp, setMode } from "./mockApp";
 /**
  * 136-B：编辑模式的脚注 —— 点引用落到定义上、改正文只动那一块。
  *
- * 这一份是 Q27（她定「先不做跨块重排」）的**端到端**凭据：
- * 单测那边钉的是纯函数往返，这里钉的是"她在界面上改一个字，落盘的文件长什么样"。
+ * 这一份是 Q27（已定「先不做跨块重排」）的**端到端**凭据：
+ * 单测那边钉的是纯函数往返，这里钉的是"在界面上改一个字，落盘的文件长什么样"。
  */
 
 const PATH = "/demo/脚注编辑.md";
@@ -84,7 +84,7 @@ test("改一条定义：另一条、正文段落、标题都逐字节不动", as
   expect(saved).toContain("正文一句[^a]，再来一句[^b]。");
   expect(saved).toContain("中间段落不动。");
   expect(saved).toContain("# 脚注编辑");
-  // 引用的原文没被改写（她改的是定义，不是引用）
+  // 引用的原文没被改写（改的是定义，不是引用）
   expect(before("[^a]:")).toBe(DOC.slice(0, DOC.indexOf("[^a]:")));
 });
 
@@ -96,7 +96,7 @@ test("什么都没改就保存：文件与原文一字不差", async ({ page }) 
 
 test("**没有定义的 `[^zz]` 就是普通文字**，不该被当成引用节点、也不该被改坏", async ({ page }) => {
   // CommonMark/GFM 的规矩：脚注引用必须有对应定义才成立。
-  // 这条测的是"我们不替她发明结构"：悬空的 [^zz] 必须逐字节留在正文里。
+  // 这条测的是"不替文档发明结构"：悬空的 [^zz] 必须逐字节留在正文里。
   const orphan = ["# 悬空", "", "这里有个[^zz]但没有定义。", ""].join("\n");
   await seedAndOpen(page, orphan);
   await expect(page.getByTestId("pm-footnote-ref")).toHaveCount(0);

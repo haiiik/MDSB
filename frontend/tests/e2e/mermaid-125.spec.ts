@@ -57,7 +57,7 @@ const overflowOf = (page: Page) =>
     return { 溢出px: Math.round(溢出px), 行数最多 };
   });
 
-test("① 长中文标签折行后，文字仍在形状框里（她说的「溢出了」）", async ({ page }) => {
+test("① 长中文标签折行后，文字仍在形状框里（那句「溢出了」）", async ({ page }) => {
   await openDiagram(page);
   await page.waitForSelector('.hp-mermaid[data-state="done"] svg', { timeout: 30000 });
   const r = await overflowOf(page);

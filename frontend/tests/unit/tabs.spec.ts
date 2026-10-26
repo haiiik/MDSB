@@ -112,11 +112,11 @@ describe("打开与去重", () => {
   });
 
   it("路径统一成正斜杠存储", async () => {
-    const win = "C:\\Users\\han\\文档\\a.md";
+    const win = "C:\\Users\\demo\\文档\\a.md";
     // 假宿主按原样查表（真 Go 侧对反斜杠路径同样能读）
     files[win] = "# 中文路径";
     await openPath(win);
-    expect(tabs.list[0].path).toBe("C:/Users/han/文档/a.md");
+    expect(tabs.list[0].path).toBe("C:/Users/demo/文档/a.md");
   });
 });
 
@@ -221,9 +221,9 @@ describe("模式与滚动", () => {
     expect(b.scroll.source).toBe(0);
   });
 
-  // 125：标签栏的循环按钮按她的口径 Q10 删了，`nextMode` / `cycleMode` 一起下线。
+  // 125：标签栏的循环按钮按已定口径 Q10 删了，`nextMode` / `cycleMode` 一起下线。
   // 这里钉的是「入口没了但状态机还在」：`MODE_CYCLE` 仍是底栏三按钮的左→右顺序，
-  // 且**只有** `setMode` 能改档 —— 谁想加回循环，得先把她这条口径改回来。
+  // 且**只有** `setMode` 能改档 —— 谁想加回循环，得先把这条口径改回来。
   it("底栏按钮组的顺序是 阅读 → 编辑 → 源码，且不存在循环入口", () => {
     expect(MODE_CYCLE).toEqual(["read", "edit", "source"]);
   });

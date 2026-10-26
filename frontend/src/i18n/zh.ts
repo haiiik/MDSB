@@ -225,6 +225,15 @@ const zh = {
   "mermaid.emptyLabel": "标签不能是空的。要删掉这个节点，请在源码模式里改。",
   "mermaid.identifierRule": "这一处是标识符（类型名 / 属性名 / 键标记），只能是一串不带空格的词。",
   "mermaid.wouldBreak": "这段文字里有双引号，还有「{text}」会提前结束标签的字符，直接写会破坏图的结构。请切源码模式改。",
+  // 159：改字给两条路 —— 只改显示 / 一起改名（按钮文案与四条拒绝理由）
+  "mermaid.displayOnly": "只改显示",
+  "mermaid.renameButton": "一起改名 {count} 处",
+  "mermaid.renameUnsupported": "这类图的标识符规则还没摸清，为了不改坏图没有写入。请在下面的源码里改。",
+  "mermaid.renameBadId": "「{name}」不能当名字用：只能是字母、数字、下划线或汉字，中间不带空格和括号。",
+  "mermaid.renameNotFound": "源码里没找到这个名字，没有写入。可能是图刚被别处改过，请重新双击。",
+  "mermaid.renameClash": "「{name}」在这张图里已经是另一个名字了，改名会把两者混成一个。没有写入。",
+  "mermaid.aliasBadText": "显示名里不能有双引号或换行，直接写会破坏图的结构。请换一种写法，或切源码模式改。",
+  "mermaid.aliasViaLabel": "这类图的显示名就是节点标签本身，请用「只改显示」直接改那一段文字。",
   "math.notLoaded": "公式渲染组件尚未加载",
   // 编辑模式里看得见的占位说明（102 / 103）
   "opaque.defaultLabel": "（此内容编辑模式不修改）",
@@ -246,6 +255,26 @@ const zh = {
   "table.toggleHeader": "设为表头 / 取消表头",
   "table.deleteRow": "删除本行",
   "table.deleteColumn": "删除本列",
+  // 154 / 155 / 156：输出（打印、导出 HTML、导出 PDF）
+  "output.export": "导出",
+  "output.exportHint": "导出为单文件 HTML，或经系统打印界面另存为 PDF",
+  "output.print": "打印",
+  "output.printHint": "Ctrl+P；纸面固定浅色，不带界面上的按钮",
+  "output.pdf": "导出 PDF",
+  "output.pdfHint": "在弹出的打印界面里，把打印机选成「Microsoft Print to PDF」或「另存为 PDF」",
+  "output.html": "导出 HTML",
+  "output.htmlHint": "单文件：图片内嵌进去，发给别人不缺图",
+  "output.mermaidTimeout": "有 Mermaid 图一直没渲完，这份输出里可能缺图",
+  "output.htmlDone": "已导出 HTML",
+  "output.htmlPartial": "已导出 HTML：{ok} 张图内嵌好了，{bad} 张取不到（留着原路径）",
+  "output.failed": "导出失败",
+  // 157：Callouts 提示块的标题（`> [!NOTE]` 那一族）。
+  // 标记本身（`[!NOTE]`）是文档内容，**不翻**；标题是我们画的界面元素，走字典。
+  "callout.note": "注意",
+  "callout.tip": "提示",
+  "callout.important": "重要",
+  "callout.warning": "警告",
+  "callout.caution": "警惕",
 } as const;
 
 export default zh;

@@ -116,6 +116,82 @@
   margin-bottom: 0;
 }
 
+/*
+ * 157：GFM 提示块（`> [!NOTE]` 那一族）。
+ *
+ * 选择器写成 `.hp-doc blockquote.hp-callout`（多加一个类）而不是光 `.hp-callout`：
+ * 上面那条 `.hp-doc blockquote` 是 0-1-1，只写 `.hp-doc .hp-callout` 是 0-2-0，
+ * 差一点点就压不住引用块的左边条与底色 —— 差一点就是"看着像没生效"。
+ * 五种类型只改三个变量（字色 / 底色 / 左边条），排版规则共用一份。
+ */
+.hp-doc blockquote.hp-callout {
+  padding: 12px 16px;
+  border-left: 3px solid var(--hp-co);
+  border-radius: 6px;
+  background: var(--hp-co-bg);
+  color: var(--hp-fg);
+}
+
+.hp-callout__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  color: var(--hp-co);
+  font-weight: 600;
+}
+
+.hp-callout__title svg {
+  flex: none;
+}
+
+.hp-callout > *:last-child {
+  margin-bottom: 0;
+}
+
+.hp-callout--note {
+  --hp-co: #3565b8;
+  --hp-co-bg: rgba(53, 101, 184, 0.09);
+}
+.hp-callout--tip {
+  --hp-co: #2f7d51;
+  --hp-co-bg: rgba(47, 125, 81, 0.09);
+}
+.hp-callout--important {
+  --hp-co: #6a4bab;
+  --hp-co-bg: rgba(106, 75, 171, 0.09);
+}
+.hp-callout--warning {
+  --hp-co: #9a6b12;
+  --hp-co-bg: rgba(154, 107, 18, 0.11);
+}
+.hp-callout--caution {
+  --hp-co: #b3261e;
+  --hp-co-bg: rgba(179, 38, 30, 0.09);
+}
+
+/* 深色档：同一批色相整体提亮（浅底上的 4.5:1 搬到深底就不够了，152 那条教训） */
+html[data-theme="dark"] .hp-callout--note {
+  --hp-co: #7fb0ff;
+  --hp-co-bg: rgba(127, 176, 255, 0.12);
+}
+html[data-theme="dark"] .hp-callout--tip {
+  --hp-co: #6fd39a;
+  --hp-co-bg: rgba(111, 211, 154, 0.12);
+}
+html[data-theme="dark"] .hp-callout--important {
+  --hp-co: #b9a3ff;
+  --hp-co-bg: rgba(185, 163, 255, 0.12);
+}
+html[data-theme="dark"] .hp-callout--warning {
+  --hp-co: #e7bd6b;
+  --hp-co-bg: rgba(231, 189, 107, 0.12);
+}
+html[data-theme="dark"] .hp-callout--caution {
+  --hp-co: #ff8f86;
+  --hp-co-bg: rgba(255, 143, 134, 0.12);
+}
+
 .hp-doc hr {
   height: 1px;
   margin: 2em 0;
@@ -252,7 +328,7 @@
 /*
  * 长中文标签折行：mermaid 按 `flowchart.wrappingWidth` 算好了折行与盒子高度，
  * 却把标签元素写成 `white-space: nowrap`（探针实测），于是中文一行冲出去被
- * foreignObject 裁掉 —— 她截图里「二级单位会签：设备管理主管…」就是这么断的。
+ * foreignObject 裁掉 —— 截图里「二级单位会签：设备管理主管…」就是这么断的。
  * 这里把换行放开，并允许在汉字间断行（中文没有空格，只按词换行等于不换行）。
  */
 .hp-doc .hp-mermaid svg foreignObject > div,
@@ -609,8 +685,8 @@
 
 /*
  * 145：编辑档里**「源码 + 另有渲染产物」那两类块**（Mermaid、块级公式）默认**整段收起源码**
- * （她 10-22：「隐藏的再彻底一点，点了编辑源码再展开」）。
- * 她 2026-10-22 把口径钉死：「代码块不收，收的是既展示源码又通过其他方式展示的内容」——
+ * （10-22：「隐藏的再彻底一点，点了编辑源码再展开」）。
+ * 2026-10-22 把口径钉死：「代码块不收，收的是既展示源码又通过其他方式展示的内容」——
  * 所以这条只管 `data-mermaid="1"` 的代码块与 `.hp-mathblock`，普通代码块摊开显示、不给按钮。
  * 只裁可视高度、内边距一并归零，**不动 DOM 里的一个字** —— 折叠不该影响落盘内容，保真口径优先。
  * 也不用 `display: none`：那块 `pre` 里挂着 PM 的 `contentDOM`，从渲染树里整个摘掉会让
@@ -676,7 +752,7 @@
   border-color: var(--hp-accent);
 }
 
-/* 到顶/到底那一侧的键不给摆着点不动（她的口径：不可用的选项干脆不摆） */
+/* 到顶/到底那一侧的键不给摆着点不动（已定口径：不可用的选项干脆不摆） */
 .hp-doc .hp-codebox__zoom button:disabled {
   opacity: 0.35;
   cursor: default;
@@ -911,7 +987,7 @@
 }
 
 /* ---------- 136-B 脚注（编辑模式） ---------- */
-/* 定义块：标记是语法骨架，不是她能改的文字 → 用伪元素画，不进 DOM
+/* 定义块：标记是语法骨架，不是可改的文字 → 用伪元素画，不进 DOM
    （进 DOM 就会被 PM 的 domAtPos 认成内容区，实测会把打字吃进标记里） */
 .hp-doc .hp-fndef {
   margin: 0.25em 0;
@@ -963,7 +1039,7 @@
 .hp-doc .hp-math--block {
   display: block;
   margin: 0.6em 0;
-  /* 长公式宁可横向滚，也不许把正文撑出横向滚动条（她的口径：收缩优先于换行/溢出） */
+  /* 长公式宁可横向滚，也不许把正文撑出横向滚动条（已定口径：收缩优先于换行/溢出） */
   overflow-x: auto;
   overflow-y: hidden;
 }

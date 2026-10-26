@@ -35,7 +35,7 @@ export async function freshSession(page: Page): Promise<void> {
  * 把当前标签切到指定模式。
  *
  * 125 之后**只有一个入口**：底栏那三个直达按钮（`mode-read` / `mode-edit` / `mode-source`），
- * 点哪档就是哪档。标签栏那个「点击循环」的按钮按她的口径 Q10 删了，
+ * 点哪档就是哪档。标签栏那个「点击循环」的按钮按已定口径 Q10 删了，
  * helper 也因此不用再把「当前在哪档」算进循环次数 —— 直接点目标档，再等 `is-on` 走过来。
  */
 export async function setMode(page: Page, want: "read" | "edit" | "source"): Promise<void> {

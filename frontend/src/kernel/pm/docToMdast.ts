@@ -120,10 +120,10 @@ function inlineToMdast(node: PMNode): Md {
   }
   if (node.type.name === "math_inline") {
     /**
-     * 138-B：定界符个数由属性带回去，正文就是她改过的那段。
+     * 138-B：定界符个数由属性带回去，正文就是改过的那段。
      * 走 html 节点是因为 remark 的 math 序列化器会**重排定界符**
      * （单行 `$$x$$` 会被写成 `$x$`，见 138 工单的实测记录），
-     * 而 html 是逐字节透写 —— 骨架归我们，改动只在她动过的那一段。
+     * 而 html 是逐字节透写 —— 骨架归我们，改动只在动过的那一段。
      */
     return {
       type: "html",
@@ -135,15 +135,15 @@ function inlineToMdast(node: PMNode): Md {
     };
   }
   if (node.type.name === "footnote_ref") {
-    // 136-B：引用还是"原文说了算" —— raw 在就按 raw 落地（她没法在编辑模式改引用文字，
+    // 136-B：引用还是"原文说了算" —— raw 在就按 raw 落地（没法在编辑模式改引用文字，
     // 改了 label 也只会让引用和定义接不上），拿不到 raw 才按 label 现拼一个。
     return { type: "html", value: String(node.attrs.raw || `[^${String(node.attrs.label ?? "")}]`) };
   }
   if (node.type.name === "math_inline") {
     /**
-     * 138-B：行内公式的定界符个数存在属性上，正文只取她改过的那一段。
+     * 138-B：行内公式的定界符个数存在属性上，正文只取改过的那一段。
      * 走 `html` 节点而不是 `inlineMath`：后者会让 remark 的序列化器**重新决定定界符**
-     * （单行 `$$x$$` 被写成 `$x$`，实测见工单 138），而她没改过的那部分不该被动。
+     * （单行 `$$x$$` 被写成 `$x$`，实测见工单 138），而没改过的那部分不该被动。
      */
     return {
       type: "html",
@@ -231,7 +231,7 @@ export function blockToMdast(node: PMNode): Md {
     case "footnote_def": {
       // 136-B：定义块 = 标记 + 冒号后空白 + 正文（按原文缩进重排续行）。
       // 走 joinFootnoteDef 而不是让 remark 的序列化器重排 —— 后者会把两格续行缩进改成四格，
-      // 那是她没做过的改动（实测见工单 136 §一）。
+      // 那是没人做过的改动（实测见工单 136 §一）。
       return {
         type: "html",
         value: joinFootnoteDef({
@@ -245,7 +245,7 @@ export function blockToMdast(node: PMNode): Md {
 
     /**
      * 138-B：公式与脚注同一条理由 —— **不让 remark 的序列化器重排**。
-     * `$$…$$` 的定界符个数、两侧空白、CRLF 都存在属性上，正文只改她动过的那一段，
+     * `$$…$$` 的定界符个数、两侧空白、CRLF 都存在属性上，正文只改动过的那一段，
      * 拼回原串后当 html 节点落地（remark 对 html 节点是逐字节透写的）。
      */
     case "math_block":
@@ -261,7 +261,7 @@ export function blockToMdast(node: PMNode): Md {
     case "math_block":
       // 138-B：与 footnote_def 同一条理由 —— **不让 remark 的序列化器重排定界符**
       // （它会把单行 `$$x$$` 规范成 `$x$`，见工单 138 的实测记录）。
-      // 骨架（定界符个数、两侧空白、CRLF）存在属性上，正文只取她改过的那一段，
+      // 骨架（定界符个数、两侧空白、CRLF）存在属性上，正文只取改过的那一段，
       // joinMathBlock 拼回原串后当 html 节点落地 —— remark 对 html 是逐字节透写的。
       return {
         type: "html",

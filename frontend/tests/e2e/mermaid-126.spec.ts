@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { freshSession, gotoApp, setMode } from "./mockApp";
 
 /**
- * 126：她贴的两张图（erDiagram / stateDiagram-v2）也要能双击改字。
+ * 126：贴的两张图（erDiagram / stateDiagram-v2）也要能双击改字。
  *
  * 125 那套就地编辑是靠 flowchart 的 DOM id 反查源码的，ER 与 state 的语法完全不同 ——
  * 这一颗补的是**按图类型分派的解析**，以及「解析得出来但故意不给改」的那一类：

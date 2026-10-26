@@ -129,7 +129,7 @@ export function listKeymap(itemType: NodeType) {
  * 142：这一条键位顺手收住了三个「Tab 之后字没了」的口子（链式，前一个返回 false 才轮到后一个）：
  * - 最后一格按 Tab → 出表格、落到下面那一行（`exitTableBelow`）；
  * - 代码块 / 公式块里按 Tab → 插入一个制表符当缩进（`baseKeymap` 没绑 Tab，
- *   原来浏览器默认行为是**把焦点移走**，她接着打的字全落在页面背景上）；
+ *   原来浏览器默认行为是**把焦点移走**，接着打的字全落在页面背景上）；
  * - 正文里按 Tab → 什么都不做，但**也不许把焦点弄丢**。
  *   「Tab 在正文里到底是缩进还是制表符」没对齐（记 Q33），没对齐就别猜着上线，
  *   接住事件比猜一个语义、比丢焦点都稳。
@@ -144,13 +144,13 @@ export function tabKeymap() {
 /**
  * 142：表格**结尾出不去**这一类问题的总修。
  *
- * 她的原话是「新建文件时从别的文件复制来表格，然后想另起一行写正文或标题，无法从下一行开始」。
+ * 原始诉求是「新建文件时从别的文件复制来表格，然后想另起一行写正文或标题，无法从下一行开始」。
  * 拆成三个各自独立、缺一都还坏的动作：
  *
  * 1. `ensureTrailingParagraph`：**编辑模式的文档永远以普通段落收尾**
  *    （最后一块不是段落、或者一个块都不剩，就补一个空段落）。
  *    表格、分割线这类块**没有文本位置**，光标根本进不去「它们之后」；代码块 / 公式 / 脚注定义
- *    有文本位置但进去就出不来（唯一的出口是 `baseKeymap` 里 `Mod-Enter` 的 exitCode，她不知道）；
+ *    有文本位置但进去就出不来（唯一的出口是 `baseKeymap` 里 `Mod-Enter` 的 exitCode，不知道）；
  *    标题 / 列表 / 引用块结尾则是「点下方空白，光标落进最后一块里」——
  *    实测在引用块下面点一下，打的字变成引用块的第二段。
  *    与其按「哪些块后面没法输入」列一张表（一定会漏），判据换成一句白话：
@@ -172,7 +172,7 @@ export function needsTrailingParagraph(doc: PMNode): boolean {
  * 需要时在文档末尾补一个空段落；不需要就原样返回同一个节点。
  *
  * **补的那一段不带源区间**（`srcFrom/srcTo` 为 null），于是它走的是 103 已经有的
- * 「新块」分支：不碰原文。她真在里面打字时，这一行是 `sourceDoc` 里那个**旧的无源块**，
+ * 「新块」分支：不碰原文。真在里面打字时，这一行是 `sourceDoc` 里那个**旧的无源块**，
  * 回写走的是 `changedBlocks` 的「边界往外退到最近有源邻居」那条分支
  * （**不是**纯插入分支 —— 别看错，`patches.ts` 的 pushRegion 里两种形状都有用例）。
  * 调用点在 `EditView.buildState`：必须在 `sourceDoc = state.doc` 之前补，
@@ -191,7 +191,7 @@ export function ensureTrailingParagraph(doc: PMNode): PMNode {
  * ① PM 自动填空掉出来的**空占位块**换成段落；
  * ② 末尾永远留一行可以直接打字的普通段落（粘完一张表、或把末尾那行删掉之后都会用到）。
  *
- * 她删不掉末尾那个空段落 —— 与「文档永远有一行可以写字」是同一件事的两面，
+ * 删不掉末尾那个空段落 —— 与「文档永远有一行可以写字」是同一件事的两面，
  * PM 自己也不允许文档一个块都不剩。
  */
 export function documentShapePlugin(): Plugin {
@@ -207,7 +207,7 @@ export function documentShapePlugin(): Plugin {
        * **输入规则刚触发的那一轮什么都不加**：`prosemirror-inputrules` 的暂存在任何
        * 带 docChanged 的事务之后都会被清空，而我们这笔补行就是这样一个事务 ——
        * 结果「打 `# ` 变标题 → 退格撤回」整条失效（实测撤回后连 `#` 都没了，
-       * 退格变成了普通的合并上一块）。让开这一轮，形状等到她下一次真改文档再守。
+       * 退格变成了普通的合并上一块）。让开这一轮，形状等到下一次真改文档再守。
        * 记账见 `inputRules.ts` 里 `INPUT_RULE_META` 那段。
        */
       if (transactions.some((tr) => tr.getMeta(INPUT_RULE_META))) return null;
@@ -229,7 +229,7 @@ export function documentShapePlugin(): Plugin {
  * 而我们这张 schema 的 block 组排到第一的是 `opaque_block`
  * （实测 `doc.contentMatch.defaultType.name === "opaque_block"`）。
  * 症状很难看也很难查：**Ctrl+A + Backspace 之后文档变成一个「此内容编辑模式不修改」的块**，
- * 打不了字、也删不掉，她只能关标签重开。
+ * 打不了字、也删不掉，只能关标签重开。
  *
  * 判据用「label 与 raw 都是空、又没有源区间」—— 真从 Markdown 解析出来的占位块
  * 一定带着原文和标签（见 `mdastToDoc` 的 default 分支），三项全空的只可能是自动填出来的壳。
@@ -329,7 +329,7 @@ const insertTabInCode: Command = (state, dispatch) => {
  * 142：正文里的 Tab **先接住，什么都不做**。
  *
  * 不接住的后果不是「Tab 没反应」，而是**焦点跑到工具栏/底栏上**（实测空档按 Tab，
- * `activeElement` 变成底栏那颗 `statusbar__mode` 按钮），她接着打的字全落在页面背景上 ——
+ * `activeElement` 变成底栏那颗 `statusbar__mode` 按钮），接着打的字全落在页面背景上 ——
  * 静默丢输入，比一条没绑定的键严重得多。
  * Tab 在正文里的真语义（缩进？制表符？列表降格？）没对齐，记 **Q33** 等作者定，不猜着上线。
  */
@@ -351,7 +351,7 @@ export const cellEnterBreak: Command = (state, dispatch) => {
    * **选区不是一个插入符时接住回车、什么都不做**（review 抓的：原来只认 `$cursor`，
    * 非光标就返回 false 落回 `baseKeymap` 的 `splitBlock` —— 正是这条注释宣称消灭的拆段落，
    * 拖选一片格子、格子里选中一张图片、甚至只是用鼠标划选了一格里的几个字，都会走到那）。
-   * 这里不猜她想干什么：拆段落丢字，给选区每一格插一个换行也是猜。
+   * 这里不猜意图：拆段落丢字，给选区每一格插一个换行也是猜。
    */
   const $cursor = state.selection instanceof TextSelection ? state.selection.$cursor : null;
   if (!$cursor) return true;
@@ -386,10 +386,10 @@ function footnoteDefPos(state: EditorState, label: string): number | null {
 /**
  * 136-B：编辑模式里**点脚注引用 → 滚到对应定义并把光标放进去**。
  *
- * 她定的口径是「点引用跳到定义改文字」。为什么落点是"光标进正文"而不是只滚动：
- * 只滚过去她还得再点一次才能改，那这一步就没省掉任何动作。
+ * 已定的口径是「点引用跳到定义改文字」。为什么落点是"光标进正文"而不是只滚动：
+ * 只滚过去还得再点一次才能改，那这一步就没省掉任何动作。
  *
- * 找不到定义时**不吞这次点击**（返回 false）—— 引用悬空是她自己写的状态，
+ * 找不到定义时**不吞这次点击**（返回 false）—— 引用悬空是文档里本来写的状态，
  * 点了没反应比弹一句"没有这条定义"更不扰人，也不会把点击顺带变成选区清空。
  */
 export function footnoteJumpPlugin(): Plugin {

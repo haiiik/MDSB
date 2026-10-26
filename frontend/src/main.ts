@@ -2,6 +2,8 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import "./style.css";
 import "./styles/reading.css";
+/* 154：纸面样式（@media print）排在最后 —— 与上面同权重的规则要靠"后者赢"覆盖 */
+import "./styles/print.css";
 import { installReadyProbe } from "./kernel/perf";
 
 installReadyProbe();

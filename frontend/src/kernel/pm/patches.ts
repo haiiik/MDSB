@@ -149,7 +149,7 @@ export function changedBlocks(oldDoc: PMNode, newDoc: PMNode, source: string): B
         后置 = oldK.slice(oEnd, q);
       } else {
         // 一直到文件末尾：把末尾的空白留在区间外 ——
-        // 「文件以换行结尾」这件事不是她改的，不该被这次替换顺手改掉。
+        // 「文件以换行结尾」这件事不是本次改动，不该被这次替换顺手改掉。
         // 这条路上**不补后空行**：区间右端已经贴着最后一块的文字，补了就多两行空白。
         let t = source.length;
         while (t > from && /\s/.test(source[t - 1])) t--;

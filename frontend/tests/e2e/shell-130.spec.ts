@@ -10,19 +10,19 @@ async function 开示例(page: Page) {
 }
 
 /**
- * 130 · 她这一批的四条：字号搬进编辑工具栏、底栏右下角的文件名删掉、
+ * 130 · 这一批的四条：字号搬进编辑工具栏、底栏右下角的文件名删掉、
  * 设置里那行版本信息改成「产品名 · 版本」、软件名 MDStar。
  *
  * 每条都钉一件"改错了会静默成立"的事：
  * - 字号**只作用编辑档**：光看编辑档变大了不算过，必须同时证明**阅读档没跟着变**
- *   （她删设置项的理由就是「与缩放重复」—— 阅读档要大小请用缩放，别再吃字号）。
+ *   （删设置项的理由就是「与缩放重复」—— 阅读档要大小请用缩放，别再吃字号）。
  * - 底栏文件名删干净：不能只断元素没了，还要断**底栏整条文本里不含当前文件名**，
  *   否则以后有人换个 class 又把它塞回来。
  * - 版本行不许再出现宿主字样（`wails` / `windows` / `mock`）。
  */
 test("字号功能已隐藏：设置里没有，编辑工具栏里也没有", async ({ page }) => {
   await 开示例(page);
-  // ① 设置里那条她明确要删（与缩放重复）
+  // ① 设置里那条明确要删（与缩放重复）
   await page.getByTestId("open-settings").click();
   await expect(page.getByTestId("setting-fontsize")).toHaveCount(0);
   await expect(page.locator(".rows .row__label", { hasText: "基础字号" })).toHaveCount(0);

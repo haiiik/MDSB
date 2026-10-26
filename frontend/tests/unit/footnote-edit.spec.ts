@@ -10,7 +10,7 @@ import { hpSchema } from "../../src/kernel/pm/schema";
  * 136-B 的保真判据：脚注定义块从「不透明占位」升级成「可编辑节点」之后，
  * **没编辑时仍然逐字节不动**，编辑时只动那一块。
  *
- * 这两条是 Q27（她定：先不做跨块重排）能成立的唯一凭据 ——
+ * 这两条是 Q27（已定：先不做跨块重排）能成立的唯一凭据 ——
  * 光靠"我们没写重排代码"不算证据，必须钉住落盘字节。
  */
 
@@ -101,7 +101,7 @@ describe("136-B：脚注定义块升级成可编辑节点后的保真", () => {
       },
     ]);
     expect(out).toContain("[^a]: 改过的正文");
-    // 原文里那条的续行没了 —— 因为她把整块正文换掉了，这是"这一块她动过"的应有含义
+    // 原文里那条的续行没了 —— 因为把整块正文换掉了，这是"这一块动过"的应有含义
     expect(out).toContain("[^b]:   第二个定义，冒号后三个空格");
     expect(out).toContain("正文一句[^a]，再来一句[^b]。");
     expect(out).toContain("中间段落，用来隔开两块脚注定义。");
@@ -114,7 +114,7 @@ describe("136-B：脚注定义块升级成可编辑节点后的保真", () => {
     }
   });
 
-  it("引用节点按原文落地（她改不了引用文字，就不该产生差异）", () => {
+  it("引用节点按原文落地（改不了引用文字，就不该产生差异）", () => {
     const blocks = topBlocks(MD);
     const para = kidsOf(doc)[0];
     expect(serializeBlock(blockToMdast(para) as Parameters<typeof serializeBlock>[0])).toBe(

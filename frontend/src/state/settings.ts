@@ -17,7 +17,7 @@ export interface Settings {
   /**
    * 界面语言（M3-134）。**默认中文**；
    * 安装器写的 `HKCU\Software\MDStar\Language` 是「首启初值」的来源，
-   * 一旦这里存过值就以它为准（她定的口径：设置里只有 中文 / English 双选，不做跟随系统）。
+   * 一旦这里存过值就以它为准（已定的口径：设置里只有 中文 / English 双选，不做跟随系统）。
    */
   lang: Lang;
 }

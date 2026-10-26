@@ -139,7 +139,7 @@ const doclinkOpen = ref(false);
 function onDocLinkInsert(payload: { text: string; href: string }) {
   doclinkOpen.value = false;
   runCommand(insertDocLinkCommand(payload.text, payload.href));
-  // 弹层关掉后焦点必须回编辑器，否则她接着打字会打到窗口上（EditToolbar 那排按钮同理）
+  // 弹层关掉后焦点必须回编辑器，否则接着打字会打到窗口上（EditToolbar 那排按钮同理）
   view?.focus();
 }
 
@@ -244,7 +244,7 @@ function buildState(md: string) {
       // 142：表格与 Tab 的键位，同样必须在 baseKeymap 之前 ——
       // 否则 Enter 先被 `splitBlock` 吃掉（格子里拆第二段、落盘把「甲」「乙」并成「甲乙」）；
       // 而 Tab 在 baseKeymap 里**根本没有绑定**，浏览器默认行为是把焦点移走，
-      // 她接着打的字全落在页面背景上（实测空档按 Tab，activeElement 变成底栏的模式按钮）。
+      // 接着打的字全落在页面背景上（实测空档按 Tab，activeElement 变成底栏的模式按钮）。
       tableEnterKeymap(),
       tabKeymap(),
       taskListPlugin(),
@@ -278,7 +278,7 @@ function editorProps(state: EditorState): DirectEditorProps {
           node,
           getPos as () => number | undefined,
           () => props.theme,
-          // 146-A：每张图的缩放倍率按「标签页 + 源区间」存，换档回来还是她调过的那一档
+          // 146-A：每张图的缩放倍率按「标签页 + 源区间」存，换档回来还是调过的那一档
           () => props.tabId ?? "",
         ),
       // 138-B：块级公式「上面排版、下面改源码」，与 code_block 同一套路（防抖 + 去重 + 降级）
@@ -605,7 +605,7 @@ defineExpose({
 }
 
 /*
- * 149-A（她 10-22：「编辑模式为什么会有奇怪的换行」）：
+ * 149-A（10-22：「编辑模式为什么会有奇怪的换行」）：
  * prosemirror-view 自带一条 `.ProseMirror { white-space: pre-wrap; white-space: break-spaces }`
  * —— 后一句是前一句的降级写法，Chrome 认 `break-spaces`，于是**源码里的软换行在编辑档真换了一行**。
  * 探针实测（同一段，源码两行、中间没有空行）：阅读档 26px、编辑档 53px，
@@ -614,7 +614,7 @@ defineExpose({
  *
  * **只改显示，不动文档**：PM 的 `whitespace` 解析规则本来就是 `normal`
  * （脚注定义块要显式 `code: true` 才保得住续行换行，正是同一件事的反面，见 `pm/schema.ts`），
- * 所以这里不会让她打的字在落盘时变样。真需要原样保留的三处 —— 代码块 `pre`、
+ * 所以这里不会让打进去的字在落盘时变样。真需要原样保留的三处 —— 代码块 `pre`、
  * 脚注定义 `.hp-fndef`、公式源码 `.hp-mathblock__src` —— 各自都写了 `white-space`，
  * 继承不到这一条；表格格子由 `.hp-doc th/td` 那条带着，两档同一份，也不受影响。
  */
@@ -623,7 +623,7 @@ defineExpose({
 }
 
 /*
- * 143：编辑档的**行间距与阅读档不一致**（她两张图：同一篇文档，编辑档的表格行明显更高，
+ * 143：编辑档的**行间距与阅读档不一致**（两张图：同一篇文档，编辑档的表格行明显更高，
  * 任务项之间空出一大截，而且文字掉到方框下面一行去了）。
  *
  * 根因不是字号也不是行高，是**多出来的一层块**：

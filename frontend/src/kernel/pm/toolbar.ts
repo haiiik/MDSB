@@ -261,8 +261,8 @@ export function linkCommand(href: string): Command {
  *
  * 与 `linkCommand` 的分工：那条要求有选区（给选中的文字加链接 mark），
  * 而"插入文档链接"最常见的场景是**光标停在那儿、什么也没选** ——
- * 这时插入文件名并加 link mark。有选区时不覆盖她选的字：
- * 把她选中的文字变成链接（和 `linkCommand` 一致），而不是拿文件名去替换。
+ * 这时插入文件名并加 link mark。有选区时不覆盖选中的字：
+ * 把选中的文字变成链接（和 `linkCommand` 一致），而不是拿文件名去替换。
  *
  * 插入的是**带 mark 的节点**，不是 `[文字](路径)` 这串字面文本 ——
  * 后者会在编辑模式里显示成裸括号，切到源码模式才发现不对。
@@ -278,7 +278,7 @@ export function insertDocLinkCommand(text: string, href: string): Command {
       tr.insertText(text, from);
       tr.addMark(from, from + text.length, mark.create({ href, title: null }));
     } else {
-      // 有选区：只加 mark，不动她的文字
+      // 有选区：只加 mark，不动选中的文字
       tr.addMark(from, to, mark.create({ href, title: null }));
     }
     if (!tr.docChanged) return false;

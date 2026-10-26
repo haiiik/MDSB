@@ -149,7 +149,7 @@ describe("mdToHtml：公式接进渲染管线", () => {
     expect(attr).toBeTruthy();
     expect(attr).not.toMatch(/[<>"']/);
     expect(decodeURIComponent(attr)).toBe('<script>"quote"</script>');
-    // 未水合时她看见的是转义后的原文，不是可执行标签
+    // 未水合时肉眼看到的是转义后的原文，不是可执行标签
     expect(html).not.toMatch(/>\s*<script/);
   });
 

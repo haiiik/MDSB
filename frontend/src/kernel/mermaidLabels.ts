@@ -2,9 +2,9 @@
  * 125：Mermaid **标签的源码级解析**。
  *
  * 一件事同时被两个功能需要，所以只做一份：
- * - 「渲染前我们自己折行」（方案 A，她 125 选的）：把长中文标签按字宽插 `<br/>` 后再交给 mermaid，
+ * - 「渲染前我们自己折行」（方案 A，125 选的）：把长中文标签按字宽插 `<br/>` 后再交给 mermaid，
  *   mermaid 就按我们定的行数算形状高度 —— 不再出现「折了行却溢出盒子」；
- * - 「双击图上的文字直接改」（她 125 要的）：要知道屏幕上这行字**对应源码里哪一段字符**，
+ * - 「双击图上的文字直接改」（125 要的）：要知道屏幕上这行字**对应源码里哪一段字符**，
  *   才能只替换那一处文字、不动结构。
  *
  * 两条口径先说清，后面别改：
@@ -422,7 +422,7 @@ function scanState(src: string): LabelSpan[] {
     if (text.includes("-->")) {
       const colon = text.indexOf(":");
       const head = colon >= 0 ? text.slice(0, colon) : text;
-      // 两端是**状态名（标识符）**：解析出来只为在她双击状态方框时给得出具体理由
+      // 两端是**状态名（标识符）**：解析出来只为在双击状态方框时给得出具体理由
       // （渲染出来的节点标签就是这些名字，不登记的话双击会毫无反应，像坏了）
       for (const side of head.split("-->")) {
         const name = side.trim();
@@ -752,4 +752,292 @@ export function createTextMeasurer(font: string): (s: string) => number {
     if (whole) return whole;
     return [...s].reduce((a, ch) => a + one(ch), 0);
   };
+}
+
+/* ------------------------------------------- 159：标识符改名与别名（纯函数） */
+
+/**
+ * 「一起改名」与「只改显示（别名）」的底层。
+ *
+ * 三条口径是这颗功能的全部风险，都体现在代码里，别绕过去：
+ * ① **只动标识符语法位**：先把"一定不是标识符"的区间（标签正文、引号内容、注释、
+ *    关系行冒号之后、ER 属性行）刷成空格，再在剩下的字符里按整词找名字 ——
+ *    `B[读 A 的值]` 里那个 A 是内容不是引用，一个字节都不许动；
+ * ② **整词匹配**：少了这一条，`ADMIN` 会被当成含 `A` 的位置一起改掉；
+ * ③ **拿不准就拒绝，拒绝时一个字都不写**：图类型不认识 / 新名字不合法 /
+ *    新名字已经是别的名字 / 源码里没找到 —— 四种理由都说得出口。
+ */
+
+/** 合法标识符（改名与别名共用）：字母 / 数字 / 下划线 / 汉字，不含空格与定界符。**汉字区间用 \u 写** */
+const RENAMEABLE_ID = /^[A-Za-z0-9_一-鿿][A-Za-z0-9_一-鿿]*$/;
+
+/**
+ * 扫描时「一个标识符」的字符集。**刻意不含 `-`**：`A-->B` 里减号是箭头的一部分，
+ * 含进来会把 `A--` 当一个名字，等于每行都认错。
+ */
+const ID_RUN = /[A-Za-z0-9_一-鿿]+/g;
+
+export type RenameKind = "flowchart" | "er" | "state" | "sequence" | "none";
+
+/** 图类型看第一行（跳过空行与注释行） */
+export function renameKindOf(src: string): RenameKind {
+  const first = src.split(/\r?\n/).find((l) => l.trim() !== "" && !l.trim().startsWith("%%")) ?? "";
+  const head = first.trim().toLowerCase();
+  if (/^(flowchart|graph)\b/.test(head)) return "flowchart";
+  if (head.startsWith("erdiagram")) return "er";
+  if (head.startsWith("statediagram")) return "state";
+  if (head.startsWith("sequencediagram")) return "sequence";
+  return "none";
+}
+
+/** 各图类型的关键字：整词命中就当作「不是标识符」刷掉（一律小写比较） */
+const MASK_KEYWORDS: Record<RenameKind, Set<string>> = {
+  flowchart: new Set(["subgraph", "end", "direction", "classdef", "click", "linkstyle", "style", "class"]),
+  er: new Set(["erdiagram", "pk", "fk", "uk"]),
+  state: new Set([
+    "statediagram",
+    "state",
+    "as",
+    "note",
+    "left",
+    "right",
+    "top",
+    "bottom",
+    "of",
+    "direction",
+    "hide",
+    "empty",
+    "description",
+    "class",
+    "click",
+    "linkstyle",
+  ]),
+  sequence: new Set([
+    "sequencediagram",
+    "participant",
+    "actor",
+    "as",
+    "note",
+    "over",
+    "loop",
+    "alt",
+    "else",
+    "end",
+    "opt",
+    "par",
+    "and",
+    "critical",
+    "break",
+    "activate",
+    "deactivate",
+    "autonumber",
+    "box",
+    "title",
+  ]),
+  none: new Set<string>(),
+};
+
+interface Run {
+  text: string;
+  from: number;
+  to: number;
+}
+
+/** 切出「标识符候选」的整词区间（base 用来把行内下标换成源码下标） */
+function runsOf(text: string, base = 0): Run[] {
+  const out: Run[] = [];
+  ID_RUN.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = ID_RUN.exec(text))) out.push({ text: m[0], from: base + m.index, to: base + m.index + m[0].length });
+  return out;
+}
+
+/**
+ * 产出一张与 `src` **等长**的掩码副本：只保留标识符语法位上的字符，其余换成空格。
+ * 等长是关键 —— 掩码里的下标可以直接当源码里的下标用，不用二次换算。
+ */
+function identifierMask(src: string, kind: RenameKind): string {
+  const chars = src.split("");
+  const blank = (from: number, to: number) => {
+    for (let i = Math.max(0, from); i < Math.min(chars.length, to); i++) chars[i] = " ";
+  };
+
+  let inEntityBlock = false;
+  let headerSeen = false;
+
+  eachLine(src, (raw, text, at0) => {
+    if (!text) return;
+    const lineStart = at0 - (raw.length - raw.trimStart().length);
+    const lineEnd = lineStart + raw.length;
+
+    if (text.startsWith("%%")) {
+      blank(lineStart, lineEnd);
+      return;
+    }
+    // 图类型声明行（flowchart LR / erDiagram / …）整行不是标识符
+    if (!headerSeen) {
+      headerSeen = true;
+      blank(lineStart, lineEnd);
+      return;
+    }
+
+    if (kind === "er") {
+      // 块头 `名字 {`：`{` 之后不是标识符；块里的属性行整行不是标识符（那是另一个命名空间）
+      if (text === "}") {
+        inEntityBlock = false;
+        blank(lineStart, lineEnd);
+        return;
+      }
+      if (inEntityBlock) {
+        blank(lineStart, lineEnd);
+        return;
+      }
+      if (/\{\s*$/.test(text)) {
+        inEntityBlock = true;
+        blank(at0 + text.indexOf("{"), lineEnd);
+      }
+    }
+
+    // 引号包住的整段都不是标识符
+    for (let i = at0; i < lineEnd; i++) {
+      const q = chars[i];
+      if (q !== '"' && q !== "'") continue;
+      let j = i + 1;
+      while (j < lineEnd && chars[j] !== q) j++;
+      blank(i, Math.min(j + 1, lineEnd));
+      i = j;
+    }
+
+    if (kind === "flowchart" || kind === "state") {
+      // 标签定界符 `[...]` `(...)` `{...}` `|...|`：里面是显示文字
+      for (let i = at0; i < lineEnd; i++) {
+        const open = chars[i];
+        const close = open === "[" ? "]" : open === "(" ? ")" : open === "{" ? "}" : open === "|" ? "|" : null;
+        if (!close) continue;
+        let j = i + 1;
+        while (j < lineEnd && chars[j] !== close) j++;
+        blank(i, j < lineEnd ? j + 1 : lineEnd);
+        if (j >= lineEnd) break;
+        i = j;
+      }
+      if (/^(classdef|click|linkstyle)\b/i.test(text)) blank(lineStart, lineEnd);
+      if (/^class\b/i.test(text)) {
+        // `class A,B nodeStyle`：最后那个是被套的样式名，不是节点
+        const runs = runsOf(chars.slice(at0, lineEnd).join(""), at0);
+        const last = runs[runs.length - 1];
+        if (last) blank(last.from, last.to);
+      }
+    }
+
+    // 冒号之后一律是文字（ER 关系标签、state 迁移标签、sequence 消息正文）
+    for (let i = at0; i < lineEnd; i++) {
+      if (chars[i] === ":") {
+        blank(i, lineEnd);
+        break;
+      }
+    }
+
+    // `participant A as 显示名`：` as ` 之后是显示名，不是标识符
+    if (kind === "sequence" && /^(participant|actor)\b/i.test(text)) {
+      const as = /\s+as\s+/i.exec(text);
+      if (as) blank(at0 + (as.index ?? 0), lineEnd);
+    }
+
+    // 关键字整词刷掉
+    for (const r of runsOf(chars.slice(at0, lineEnd).join(""), at0)) {
+      if (MASK_KEYWORDS[kind].has(r.text.toLowerCase())) blank(r.from, r.to);
+    }
+  });
+
+  return chars.join("");
+}
+
+/** 「一起改名」的结果：成功给新源码与处数，失败给**说得出口的理由** */
+export type RenameResult = { ok: true; src: string; count: number } | { ok: false; reason: string };
+
+/**
+ * 这个名字在源码里作为**标识符**出现的所有位置（界面用它算按钮上的处数）。
+ * 图类型不认识时返回空表 —— 空表就是"不许改"的形状，不是"没找到"。
+ */
+export function scanIdentifierOccurrences(src: string, id: string): { from: number; to: number }[] {
+  const kind = renameKindOf(src);
+  if (kind === "none") return [];
+  return runsOf(identifierMask(src, kind))
+    .filter((r) => r.text === id)
+    .map((r) => ({ from: r.from, to: r.to }));
+}
+
+export function applyIdentifierRename(src: string, id: string, nextId: string): RenameResult {
+  const kind = renameKindOf(src);
+  if (kind === "none") return { ok: false, reason: t("mermaid.renameUnsupported") };
+  if (!RENAMEABLE_ID.test(nextId)) return { ok: false, reason: tf("mermaid.renameBadId", { name: nextId }) };
+
+  const mask = identifierMask(src, kind);
+  const all = runsOf(mask);
+  const hits = all.filter((r) => r.text === id);
+  if (!hits.length) return { ok: false, reason: tf("mermaid.renameNotFound", { name: id }) };
+  if (nextId !== id && all.some((r) => r.text === nextId))
+    return { ok: false, reason: tf("mermaid.renameClash", { name: nextId }) };
+
+  let out = src;
+  for (const r of [...hits].reverse()) out = out.slice(0, r.from) + nextId + out.slice(r.to);
+  return { ok: true, src: out, count: hits.length };
+}
+
+/** 「只改显示」在 ER / state / sequence 里的落点：别名**就地改写**，没有别名才新建一条 */
+export type AliasResult = { ok: true; src: string; created: boolean } | { ok: false; reason: string };
+
+/** 名字要进正则，先转义 */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function applyAliasSet(src: string, id: string, display: string): AliasResult {
+  const kind = renameKindOf(src);
+  if (kind === "none") return { ok: false, reason: t("mermaid.renameUnsupported") };
+  // flowchart 的"显示名"就是节点标签本身，走 125 那条 applyLabelEdit，不在这里再插一份
+  if (kind === "flowchart") return { ok: false, reason: t("mermaid.aliasViaLabel") };
+  if (!RENAMEABLE_ID.test(id)) return { ok: false, reason: tf("mermaid.renameNotFound", { name: id }) };
+  if (!display.trim() || display.includes('"') || /[\r\n]/.test(display))
+    return { ok: false, reason: t("mermaid.aliasBadText") };
+
+  const lines = src.split("\n");
+  /**
+   * 别名声明必须独立成行：挂到关系行尾巴上是 Parse error（实测），
+   * 追加第二份又会按图类型不同表现不一致（state 出两个框 / ER 第一个赢 / sequence 最后一个赢）。
+   */
+  const specs = {
+    er: {
+      re: new RegExp(`^(\\s*)${escapeRe(id)}\\s*\\[[^\\]]*\\]\\s*$`),
+      make: (indent: string, _line?: string) => `${indent}${id}["${display}"]`,
+    },
+    state: {
+      re: new RegExp(`^(\\s*)state\\s+"[^"]*"\\s+as\\s+${escapeRe(id)}\\s*$`, "i"),
+      make: (indent: string, _line?: string) => `${indent}state "${display}" as ${id}`,
+    },
+    sequence: {
+      re: new RegExp(`^(\\s*)(participant|actor)\\s+${escapeRe(id)}(?:\\s+as\\s+.*)?\\s*$`, "i"),
+      make: (indent: string, line: string) => {
+        const kw = /^\s*actor\b/i.test(line) ? "actor" : "participant";
+        return `${indent}${kw} ${id} as ${display}`;
+      },
+    },
+  } as const;
+  const spec = specs[kind as "er" | "state" | "sequence"];
+
+  for (let i = 0; i < lines.length; i++) {
+    if (!spec.re.test(lines[i])) continue;
+    const m = spec.re.exec(lines[i]);
+    // **就地改写**这一行，绝不新插一条（重复声明的行为各图类型不一致）
+    lines[i] = spec.make(m?.[1] ?? "  ", lines[i]);
+    return { ok: true, src: lines.join("\n"), created: false };
+  }
+
+  // 没有别名 → 在图类型声明那一行之后补一条独立语句
+  let head = 0;
+  while (head < lines.length && (lines[head].trim() === "" || lines[head].trim().startsWith("%%"))) head++;
+  const next = lines[head + 1] ?? "";
+  const indent = /^(\s*)/.exec(next)?.[1] || "  ";
+  lines.splice(head + 1, 0, spec.make(indent, next));
+  return { ok: true, src: lines.join("\n"), created: true };
 }

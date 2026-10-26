@@ -20,6 +20,7 @@ import {
 import { confirm } from "./state/dialogs";
 import { closeSearch, openSearch, search as searchState } from "./state/search";
 import { settingsOpen } from "./state/settings";
+import { outputNotice, printDoc } from "./state/output";
 import { autoSaveError } from "./state/autosave";
 import { scanRecoverable, clearSnapshotFor } from "./state/snapshot";
 import { restoreSession, saveSession } from "./state/session";
@@ -68,7 +69,7 @@ async function requestCloseTab(id: string) {
     title: msg("dialog.unsavedTitle"),
     message:
       tf("dialog.unsavedMsg", { name: tab.name }) +
-      // 127（她：「关闭时让重命名文件，或者用另存」）：未命名档的「保存」其实是选位置 + 起名，
+      // 127（要求：「关闭时让重命名文件，或者用另存」）：未命名档的「保存」其实是选位置 + 起名，
       // 按钮上就该说出来，别让人以为按下去会像普通文档那样原地存好。
       (tab.path ? "" : msg("dialog.unsavedNewNote")),
     actions: [tab.path ? msg("dialog.save") : msg("dialog.saveAsName"), msg("dialog.discard")],
@@ -123,6 +124,20 @@ async function drainStartup(h: Host) {
     const ok = await openPath(p);
     if (!ok) globalError.value = tf("open.cannotOpen", { name: p.split(/[\\/]/).pop() ?? p });
   }
+}
+
+/**
+ * 158：取队列这件事要**排队**跑，一次只跑一个。
+ *
+ * 为什么要排队（不是"并发也没事"）：一个文件从 take 到开完要 await 好几次（桌面上都是 IPC），
+ * 这期间完全可能又来一个信号。两个并发的 drain 会各自 activate 一次，
+ * **后开完的那个才是界面上的活动标签**——这个先后取决于读盘快慢，不是我们能定的。
+ * 排成一条队之后，"谁最后被激活"就等于"谁最后入队"，是确定的。
+ */
+let 取队列的尾巴: Promise<void> = Promise.resolve();
+function 排一次取队列(h: Host): Promise<void> {
+  取队列的尾巴 = 取队列的尾巴.then(() => drainStartup(h)).catch(() => undefined);
+  return 取队列的尾巴;
 }
 
 /** 拖放高亮：桌面端真实路径由 Go 事件给出，这里只负责视觉反馈 */
@@ -193,6 +208,11 @@ async function onKeydown(e: KeyboardEvent) {
     else if (r.error !== "已取消") {
       await confirm({ title: msg("dialog.saveFailed"), message: r.error ?? msg("dialog.unknownError"), actions: [msg("dialog.gotIt")] });
     }
+  } else if (key === "p") {
+    // 154：打印。这里接管掉 WebView2 自带的"打印整个页面"——
+    // 不接管的话它打的是**当前视口那一屏**（外壳是内滚动布局），纸上只有半篇文档。
+    e.preventDefault();
+    await printDoc();
   } else if (key === ",") {
     e.preventDefault();
     settingsOpen.value = true;
@@ -204,6 +224,7 @@ async function onKeydown(e: KeyboardEvent) {
 }
 
 let offCloseRequest: (() => void) | null = null;
+let offStartupSignal: (() => void) | null = null;
 let beforeUnloadHandler: (() => void) | null = null;
 
 onMounted(async () => {
@@ -218,13 +239,30 @@ onMounted(async () => {
     wirePersistence(h);
     info.value = await h.info();
 
-    // 先取随进程带进来的路径，再订阅后续信号：事件可能早于前端挂载
-    await drainStartup(h);
-    h.onStartupSignal(() => void drainStartup(h));
+    /*
+     * 158（要求：「有些时候双击打开文件，标签页并不会跳到该文件的标签页……要再双击一次才动」）。
+     * 这一段**三行的顺序就是修复本身**，改动之前先读完这段注释。
+     *
+     * ① 先订阅，再去队列。原来是反的：挂载后那次 take 里每个文件都要 await 一次读盘
+     *   （桌面是 IPC，大文档几百 ms），这期间到达的信号**没有监听者** ——
+     *   Go 侧 `Emit` 只发一次、不重发，路径就一直躺在队列里，
+     *   直到下一次双击把它连带取走。"再双击一次才动"就是这么来的。
+     *   先订阅不会重复开：take 是"取走并清空"，两个来源拿到的是互不重叠的清单。
+     * ② 会话恢复排在取队列**之前**。`restoreSession()` 末尾会 activate(会话里那个 active)，
+     *   取队列如果跑在它前面，双击打开的标签就被这句话抢走激活 ——
+     *   标签确实开了，只是没跳过去（那句"两种都遇见过"里"已经开着的那个"多半是这条，
+     *   而"新文件也不跳"是①）。
+     * ③ 两次都要走 `排一次取队列`，不要直接调 `drainStartup`：见那条注释里的并发激活问题。
+     */
+    offStartupSignal = h.onStartupSignal(() => void 排一次取队列(h));
 
     await restoreSession();
     void bindPanelPersistence();
     void refreshRecent();
+
+    // 随进程带进来的路径（启动参数 / 双击关联文件 / 拖放）现在才取
+    await 排一次取队列(h);
+
     await offerRecovery(h);
 
     offCloseRequest = h.onWindowCloseRequest(() => void confirmQuit());
@@ -251,6 +289,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("drop", onDrop);
   if (beforeUnloadHandler) window.removeEventListener("beforeunload", beforeUnloadHandler);
   offCloseRequest?.();
+  offStartupSignal?.();
 });
 
 defineExpose({ confirmQuit, requestCloseTab, offerRecovery });
@@ -273,6 +312,13 @@ defineExpose({ confirmQuit, requestCloseTab, offerRecovery });
       </div>
     </div>
     <ConfirmDialog />
+    <!--
+      154–156：输出的回声。导出这种"点一下、等几秒、什么也没发生"的动作，
+      没有反馈就等于没做（146-C 定过的同一条口径：替换结果要说出来）。
+    -->
+    <div v-if="outputNotice" class="toast" data-testid="output-notice" role="status">
+      {{ outputNotice }}
+    </div>
     <!-- 130：这里只报「MDStar v版本」；宿主与平台（wails · windows）不再出现在界面上 -->
     <SettingsDialog :version="info?.version ?? ''" />
   </div>
@@ -319,5 +365,23 @@ defineExpose({ confirmQuit, requestCloseTab, offerRecovery });
   color: var(--hp-error);
   font-size: 12px;
   font-weight: 400;
+}
+
+/* 154–156：输出提示的小胶囊。压在底栏上方那一格，不挡住正文最后几行 */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--hp-statusbar-h) + 12px);
+  z-index: 70;
+  max-width: min(520px, 80vw);
+  padding: 7px 14px;
+  border: 1px solid var(--hp-border);
+  border-radius: 999px;
+  background: var(--hp-surface);
+  color: var(--hp-text);
+  box-shadow: 0 6px 20px var(--hp-shadow);
+  font-size: 12.5px;
+  text-align: center;
+  transform: translateX(-50%);
 }
 </style>

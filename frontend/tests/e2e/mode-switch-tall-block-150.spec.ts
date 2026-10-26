@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { freshSession, gotoApp, setMode } from "./mockApp";
 
 /**
- * 150（她 10-22：「编辑模式的位置，切换到阅读模式后仍对应不上，你现在是怎么找齐的？」）：
+ * 150（10-22：「编辑模式的位置，切换到阅读模式后仍对应不上，你现在是怎么找齐的？」）：
  * 换档定位补上**块内偏移**。
  *
  * 140 那套锚点只有**块级**精度：键取「视口顶端那一块」textContent 的开头，
@@ -12,7 +12,7 @@ import { freshSession, gotoApp, setMode } from "./mockApp";
  *
  * 修前实测（同一篇文档、两档内容高都是 3732）：
  * 编辑档停在表格第 28 行（scrollTop 1757）→ 阅读档落到 648，**差 1109px，落回表头**。
- * 她那份 PRD 全是长表格，所以天天撞这一条。
+ * 那份 PRD 全是长表格，所以天天撞这一条。
  *
  * 判据按**「视口上沿那一行是哪一行」**比，不按 scrollTop 比 ——
  * 三档 scrollTop 本来就不该相等（140 的立论），能比的是内容位置。

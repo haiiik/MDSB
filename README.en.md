@@ -61,6 +61,13 @@ Built from scratch, runs fully offline in a single executable.
 - A range copied from Excel / WPS → a table; pasting into an existing table pads and merges by column count
 - `Ctrl+V` a screenshot → the image is written next to the document under `assets/`, referenced by relative path, de-duplicated by content hash, never overwriting an existing file
 
+**Output**
+
+- Print (`Ctrl+P`, or the "Print" button on the bar above the reading view): light paper, A4, table headers repeat across pages, no UI chrome on paper; a long inner-scrolled document prints in full rather than just the visible screen
+- Single-file HTML export: images are embedded and styles carried along, so the file never loses them; images that can't be fetched keep their original URL and are counted in the notice
+- PDF: save as PDF through the system print dialog — the same paper stylesheet as printing, so there is never a second layout to keep in sync
+- Callouts: `> [!NOTE]` / `[!TIP]` / `[!IMPORTANT]` / `[!WARNING]` / `[!CAUTION]` render as tinted blocks with an icon in the reading view; **anything unrecognized is left exactly as written**, no guessing
+
 **Files and window**
 
 - Frameless window with custom minimize / maximize / close buttons, collapsible sidebar
@@ -88,7 +95,8 @@ Wails v3 (Go) + WebView2 · ProseMirror (own schema and mapping layer) · CodeMi
 - `alt` text and paths of existing images must be changed in source mode
 - Untitled (never saved) documents have no crash snapshot or cross-restart restore
 - Long documents (above ~90 KB) take 1–2 seconds to enter editing mode
-- No macOS / Linux build; no plugin system, Word/PDF export or multiple windows
+- No macOS / Linux build; no plugin system, no multiple windows, and no Word / image export (PDF only via the system print dialog, never generated silently)
+- Formula fonts in exported HTML still point at the app's own asset URLs, so on another machine formulas stay readable but lose some typesetting
 
 ## License
 

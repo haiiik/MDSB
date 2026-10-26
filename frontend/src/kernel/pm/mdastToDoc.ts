@@ -69,7 +69,7 @@ function opaqueLabelFor(node: AnyNode): string {
       return tf("opaque.footnoteDef", { label: String(node.label ?? node.identifier ?? "?") });
     /**
      * 138-A：公式此刻在编辑模式还是占位（138-B 才做成「预览 + 就地改源码」）。
-     * 占位里**必须带上她的原文**：只写「暂不支持的内容（math）」等于让编辑模式
+     * 占位里**必须带上原文**：只写「暂不支持的内容（math）」等于让编辑模式
      * 比做这个功能之前更难读 —— 以前 `$…$` 就是普通文字，看得见也改得动。
      * 这条是桌面实测第 17 段第一条抓出来的（E2E 当时没覆盖编辑模式的公式夹具）。
      */
@@ -127,7 +127,7 @@ function convertInline(node: AnyNode, schema: Schema, marks: readonly Mark[], so
       return [schema.nodes.hard_break.create()];
 
     /**
-     * 136-B：引用还是"原文说了算" —— raw 在就按 raw 落地（她没法在编辑模式改引用文字，
+     * 136-B：引用还是"原文说了算" —— raw 在就按 raw 落地（没法在编辑模式改引用文字，
      * 改了 label 也只会让引用和定义接不上），拿不到 raw 才按 label 现拼一个。
      */
     case "footnoteReference": {
@@ -140,9 +140,9 @@ function convertInline(node: AnyNode, schema: Schema, marks: readonly Mark[], so
     /**
      * 138-B：行内公式 `$…$` 从占位升级成**可就地编辑**的节点。
      * 定界符不进 DOM（伪元素画），拆出来的 `before/after` 存属性，回写时由
-     * `joinInlineMath` 拼回原串 —— 她能改的只有正文。
+     * `joinInlineMath` 拼回原串 —— 可改的只有正文。
      * 拆不开的形状（手写得很怪、或粘贴来根本没有源区间又缺 value）回落成占位：
-     * **宁可不能改，也不能改坏她的文件。**
+     * **宁可不能改，也不能改坏盘上那份文件。**
      */
     case "inlineMath": {
       const raw = rawOf(source, node);
@@ -291,8 +291,8 @@ function convertBlock(node: AnyNode, schema: Schema, source: string): PMNode[] {
      * 138-B：块级公式 `$$…$$` 升级成**可就地编辑**的节点（此前是不透明块）。
      *
      * 拆出来的 `before`（缩进 + 开定界符 + 其后空白）与 `after`（其前空白 + 闭定界符 + 行尾）
-     * 存属性，正文进内容 —— 她能改的只有正文，骨架由 `joinMathBlock` 原样带回去。
-     * **拆不开就回落成不透明块**：宁可不能改，也不能改坏她的文件（与 136-B 同一条纪律）。
+     * 存属性，正文进内容 —— 可改的只有正文，骨架由 `joinMathBlock` 原样带回去。
+     * **拆不开就回落成不透明块**：宁可不能改，也不能改坏盘上那份文件（与 136-B 同一条纪律）。
      */
     case "math": {
       const raw = rawOf(source, node);

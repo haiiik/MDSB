@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { freshSession, gotoApp, setMode } from "./mockApp";
 
 /**
- * 148：她「查找功能，点击查找到的高亮块时，查找条中的 5 / 98，要定位到对应数字」。
+ * 148：「查找功能，点击查找到的高亮块时，查找条中的 5 / 98，要定位到对应数字」。
  *
  * 三档都要成立（高亮分别由 PM 装饰 / CM 装饰 / CSS Custom Highlight 画，
  * 认点的办法各不一样，所以判据也按各档自己的形状去点）。
@@ -87,11 +87,11 @@ for (const [档, 选择器] of [
     await page.mouse.click(点!.x, 点!.y);
     await page.waitForTimeout(300);
     expect(await 计数(page), "点了第 4 处，计数却没跟过去").toBe("4 / 6");
-    // 当前项的标记也要跟着换人（不然她不知道现在算的是哪一处）。
+    // 当前项的标记也要跟着换人（不然看不出现在算的是哪一处）。
     /*
      * 阅读档不能拿"当前项在全部高亮里的下标"判 —— 那里头当前项被单独画进
     `hp-search-current`，**不在 `hp-search` 集合里**，按下标找永远是 -1。
-     * 所以统一改成：当前项的矩形 == 她点的那一处的矩形。
+     * 所以统一改成：当前项的矩形 == 点的那一处的矩形。
      */
     const 当前矩形 = await page.evaluate(() => {
       const el = document.querySelector(".hp-search--current");

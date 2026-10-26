@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { freshSession, gotoApp, setMode } from "./mockApp";
 
 /**
- * 127（她选的 Q19 方案）：**大图点开看 —— 在灯箱里滚轮缩放、拖拽平移**。
+ * 127（选的 Q19 方案）：**大图点开看 —— 在灯箱里滚轮缩放、拖拽平移**。
  *
  * 判据不押「看起来变大了」，押三件可数的东西：
  * ① 灯箱里那份是**克隆**（正文里那张还在、位置没塌）；
@@ -64,7 +64,7 @@ test("滚轮放大、拖拽平移、适应屏幕回到 fit", async ({ page }) =>
   expect(放大后).toBeGreaterThan(fit);
 
   /*
-   * 149-D：平移**左键照旧、右键新增**（她原话「mermaid 图上只是右键按住滑动」，
+   * 149-D：平移**左键照旧、右键新增**（原话「mermaid 图上只是右键按住滑动」，
    * 随后更正「打错字了，是支持右键按住」）—— 右键是加进来的那条路，不是换掉左键。
    * 值得加的理由：大图里那些字是 SVG 里的真文字，左键按住拖会顺手选中一片字，
    * 想干净挪图时右键没有这个副作用。所以两颗键都要钉：都拖得动，右键还不许弹系统菜单。
@@ -80,7 +80,7 @@ test("滚轮放大、拖拽平移、适应屏幕回到 fit", async ({ page }) =>
   };
 
   const 左 = await 拖("left");
-  expect(左, "左键拖不动了（她更正过口径：右键是加，不是换掉左键）").toMatch(
+  expect(左, "左键拖不动了（更正过口径：右键是加，不是换掉左键）").toMatch(
     /translate\(\s*[1-9]\d*px,\s*[1-9]\d*px\)/
   );
   await page.getByTestId("lightbox-fit").click();

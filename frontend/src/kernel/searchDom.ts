@@ -59,7 +59,7 @@ export function makeDomAdapter(root: () => HTMLElement | null, scroller: () => H
       CSS.highlights.delete(HIGHLIGHT_CURRENT);
     }
     // 焦点在输入框里时**别动文档选区**：Chromium 下 removeAllRanges() 会打断输入法组合，
-    // 表现就是查找框里敲第二个字没反应（140 她的报告）
+    // 表现就是查找框里敲第二个字没反应（140 报来的问题）
     if (!isEditingField()) window.getSelection()?.removeAllRanges();
   };
 

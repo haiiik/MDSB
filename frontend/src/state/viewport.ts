@@ -75,7 +75,7 @@ export interface HeadingRef {
  *
  * 为什么要有这一层（127）：原来侧栏点导航只认阅读模式那对 `scroller + root`，
  * 而编辑/源码模式会 `registerReadView(null, null)` —— 于是那两档点导航一律返回 false，
- * 她看到的就是「找不到小节」。三档的定位方式本来就不同：
+ * 肉眼看到的就是「找不到小节」。三档的定位方式本来就不同：
  * 阅读按标题的 `id` 找 DOM；编辑按「第 n 个标题」找 PM 的 DOM；
  * 源码没有标题 DOM，按「第 n 个 `# ` 行」在 CodeMirror 里定位。
  * 用 `index` 而不是文字匹配，重复标题也不会跳错。

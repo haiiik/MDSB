@@ -199,7 +199,7 @@ describe("自动保存（007）", () => {
   });
 });
 
-describe("127：关标签要把快照一起清掉（她踩到的「丢弃后重开又提示恢复」）", () => {
+describe("127：关标签要把快照一起清掉（踩到的「丢弃后重开又提示恢复」）", () => {
   let base: ReturnType<typeof makeBase>;
 
   beforeEach(async () => {
@@ -227,7 +227,7 @@ describe("127：关标签要把快照一起清掉（她踩到的「丢弃后重�
     expect(await h.listSnapshots()).toEqual(["/d/a.md"]);
     expect((await scanRecoverable()).map((r) => r.path)).toEqual(["/d/a.md"]);
 
-    // 她点的就是「丢弃」：`closeTab` 是这条路径的唯一落点（保存成功后关也是它）
+    // 点的就是「丢弃」：`closeTab` 是这条路径的唯一落点（保存成功后关也是它）
     closeTab(id);
     // 清快照是 `void h.clearSnapshot(...)`（产品里没人等它），断言前先把这条异步链跑完，
     // 否则读到的可能是「索引还没改写」的中间态 —— 那是用例的时机问题，不是产品问题

@@ -2,7 +2,7 @@
 import { settings, settingsOpen } from "../state/settings";
 import { t } from "../i18n";
 
-/** 130：只报「产品名 · 版本」——`wails · windows` 这些实现细节她不要看了（原来那行是 hostLabel · v版本） */
+/** 130：只报「产品名 · 版本」——`wails · windows` 这些实现细节不该摆出来（原来那行是 hostLabel · v版本） */
 defineProps<{ version: string }>();
 
 /**
@@ -31,7 +31,7 @@ function close() {
           <input v-model="settings.autoSave" type="checkbox" data-testid="setting-autosave" />
         </label>
 
-        <!-- 130：「基础字号」整行删掉 —— 她说这颗与缩放重复。
+        <!-- 130：「基础字号」整行删掉 —— 原话：这颗与缩放重复。
              曾短暂挪进编辑工具栏，但那颗的语义没对齐（不是缩放），当前连工具栏那颗一起隐藏
              （开关 `EditToolbar.vue` 的 SHOW_FONT_SIZE）。别看到"少一个设置项"就顺手加回来。 -->
 
@@ -43,7 +43,7 @@ function close() {
           <input v-model="settings.codeLineNumbers" type="checkbox" data-testid="setting-linenumbers" />
         </label>
 
-        <!-- M3-134：界面语言。只有双选（她定的口径：**不做「跟随系统」**，装的时候已经选过一次） -->
+        <!-- M3-134：界面语言。只有双选（已定的口径：**不做「跟随系统」**，装的时候已经选过一次） -->
         <label class="row">
           <span class="row__label">
             {{ t("settings.language") }}
@@ -55,6 +55,13 @@ function close() {
           </select>
         </label>
       </div>
+
+      <!--
+        154 / 155 / 156 的三颗动作**不在这里了**（2026-10-26）：它们是动作不是设置项，
+        而且一个功能只留一个入口（122 收模式切换时定的口径）—— 现在只在阅读档顶上那条栏上
+        （`OutputActions.vue`：「打印」+「导出 ▾」），`Ctrl+P` 照旧直达打印。
+        别看到"设置里少一组"就顺手加回来。
+      -->
 
       <p class="note">
         {{ t("settings.appliesNote") }}
@@ -105,6 +112,9 @@ function close() {
 .rows {
   padding: 8px 18px 4px;
 }
+
+/* 154–156：输出那一组。与上面设置项之间留一条分隔，视觉上是"另一件事" */
+
 
 .row {
   display: flex;

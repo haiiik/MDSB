@@ -188,7 +188,7 @@ describe("138-B：公式在编辑模式是可就地编辑的节点，定界符�
     const attrs = node.attrs as { before: string; after: string };
     expect(attrs.before).toBe("$");
     expect(attrs.after).toBe("$");
-    // 正文就是她能改的那一段（定界符不在 textContent 里 —— 它在 DOM 里也不该出现，见下条）
+    // 正文就是可改的那一段（定界符不在 textContent 里 —— 它在 DOM 里也不该出现，见下条）
     expect(node.textContent).toBe("E=mc^2");
   });
 

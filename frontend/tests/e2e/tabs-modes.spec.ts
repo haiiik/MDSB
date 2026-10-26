@@ -150,7 +150,7 @@ test("切标签不丢源码模式的编辑内容", async ({ page }) => {
 const onMode = (page: Page) => page.locator('[data-testid="mode-picker"] .statusbar__mode.is-on');
 
 test("模式入口只有一个：标签栏与顶栏都不再有模式按钮", async ({ page }) => {
-  // 125 按她的口径 Q10 删掉标签栏的循环按钮，`mode-switch` 这个 testid 从此不存在
+  // 125 按已定口径 Q10 删掉标签栏的循环按钮，`mode-switch` 这个 testid 从此不存在
   await expect(page.getByTestId("mode-switch")).toHaveCount(0);
   await expect(page.getByTestId("tabbar").locator('[data-testid^="mode-"]')).toHaveCount(0);
   await expect(page.getByTestId("topbar").locator('[data-testid^="mode-"]')).toHaveCount(0);
@@ -186,7 +186,7 @@ test("标签栏右端是齿轮 + 主题开关；「+」紧跟最后一个标签"
    *               tabbar__settings, themepill ]
    * 140 之前是「标签 → + → 打开 → spacer → 齿轮 → 主题」全平铺在一层，靠 spacer 把功能键推到右端；
    * 现在标签区自己占满剩余宽度（flex:1），spacer 不再需要 ——
-   * **齿轮与主题开关在标签区外面**，这正是她要的「设置主题等按钮固定位置」。
+   * **齿轮与主题开关在标签区外面**，这正是要求的「设置主题等按钮固定位置」。
    * 这条断言仍是守门人：谁再往右端塞按钮、或者把「+」钉回栏右端，这里会先红。
    */
   const 外层 = await page.evaluate(() =>
@@ -229,7 +229,7 @@ test("没有活动标签时底栏整组模式按钮不出现（不能凭空切�
 
 
 /**
- * 140（她：「页签区域不再上下左右滚动，去掉滚动条，标签过多时收纳，通过点击图标展开浮窗选择；
+ * 140（要求：「页签区域不再上下左右滚动，去掉滚动条，标签过多时收纳，通过点击图标展开浮窗选择；
  * 设置主题等按钮固定位置」）。
  *
  * 134 那条"当前标签滚进可视区"的诉求没有丢，只是换了实现：**当前标签一定在可视窗口里**，
@@ -270,7 +270,7 @@ test("标签溢出时：收纳成 +N、浮窗可选、页签区不出滚动条�
   await expect(chip).toHaveText("+" + (总数 - 可见));
   // ③ 当前标签（最后打开的第 12 篇）一定在可视窗口里 —— 134 那条诉求的新落点
   await expect(page.locator(".tab").last()).toContainText("长名字标签-12");
-  // ④ 齿轮与主题开关的位置与标签数量无关（她点名要固定）
+  // ④ 齿轮与主题开关的位置与标签数量无关（点名要固定）
   const 齿轮后 = await page.getByTestId("open-settings").boundingBox();
   const 主题后 = await page.getByTestId("theme-switch").boundingBox();
   expect(Math.abs(齿轮后!.x - 齿轮!.x)).toBeLessThanOrEqual(1);

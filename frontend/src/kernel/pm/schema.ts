@@ -63,12 +63,12 @@ const opaqueInline = {
 /**
  * 136-B：脚注定义块 —— **可编辑**，但只编辑正文。
  *
- * 为什么不是"整块原文塞一个 textarea"：那样她就得自己维护 `[^label]:` 与续行缩进，
+ * 为什么不是"整块原文塞一个 textarea"：那样就得手工维护 `[^label]:` 与续行缩进，
  * 一个手滑就把语法弄坏；也不是"像段落一样富文本"：定义里的 `**粗体**` 要不要再拆一层
- * 行内节点，拆了就要处理"她把标记删一半"，代价远超这一颗的价值。
+ * 行内节点，拆了就要处理"把标记删一半"，代价远超这一颗的价值。
  *
  * 所以：**标记与缩进存在属性上、正文是纯文本内容**，回写时走 `joinFootnoteDef` 拼回原文
- * （往返性质由 `footnote-block.spec.ts` 钉住）。她看到能改的就是正文，
+ * （往返性质由 `footnote-block.spec.ts` 钉住）。肉眼看到能改的就是正文，
  * 语法骨架由我们维持 —— 与 109 代码块「就地改内容、围栏由我们补」同一条路子。
  */
 const footnoteDef = {
@@ -76,7 +76,7 @@ const footnoteDef = {
   content: "text*",
   /**
    * **`code: true` 不是"这是代码"，而是 PM 的「这个节点的内容保留空白」开关。**
-   * 不加它：Schema 默认 `whitespace: "normal"`，她一打字 PM 就从 DOM 回读一次，
+   * 不加它：Schema 默认 `whitespace: "normal"`，一打字 PM 就从 DOM 回读一次，
    * 续行那个 `\n` 当场被折叠成空格 —— 实测存出来的文件是
    * `[^a]: 改过：第一个定义 两格缩进的续行`（换行没了）。
    * CSS 的 `white-space: pre-wrap` 只管**显示**，管不了 PM 的 DOM↔doc 往返，两者都要。
@@ -116,7 +116,7 @@ const footnoteDef = {
  * 138-B：块级公式 `$$…$$`。
  *
  * 与 136-B 的脚注定义同一套路：**定界符与两侧空白是语法骨架，存属性、不进 DOM**；
- * 她能改的只有正文。骨架由 `mathBlock.ts` 的 `splitMathBlock/joinMathBlock` 保证拼回去一字不差。
+ * 可改的只有正文。骨架由 `mathBlock.ts` 的 `splitMathBlock/joinMathBlock` 保证拼回去一字不差。
  *
  * 同样**不能把 `$$` 写进 `toDOM`**（136-B 实测：装饰文字进 DOM 会被 PM 的 `domAtPos`
  * 认成内容区，打字会落进标记里）。块级的预览由 NodeView（`nodeViews.ts` 的 `mathBlockNodeView`）
@@ -127,7 +127,7 @@ const mathBlock = {
   content: "text*",
   marks: "",
   /** 同 136-B 的教训：`code: true` 是「本节点保留空白」，不是"这是代码"。
-   *  少了它，她一打字 PM 从 DOM 回读，`\n` 与 `\ ` 当场折掉。 */
+   *  少了它，一打字 PM 从 DOM 回读，`\n` 与 `\ ` 当场折掉。*/
   code: true,
   atom: false,
   attrs: {
@@ -153,7 +153,7 @@ const mathBlock = {
  *
  * **不是原子**（与 footnote_ref 不同）：可编辑的正文在内容里，定界符交给 CSS 伪元素
  * 按 `data-hp-math-left/right` 画 —— 行内原子点进去改字要再造一套编辑态，
- * 而她要的本来就是"看得见、改得动"。Q29（行内显示源码还是排版结果）按源码做，理由见工单。
+ * 而要求的本来就是"看得见、改得动"。Q29（行内显示源码还是排版结果）按源码做，理由见工单。
  */
 const mathInline = {
   /**

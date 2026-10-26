@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { freshSession, gotoApp, placeCaret, setMode } from "./mockApp";
 
 /**
- * 142：她的原话 ——「新建文件时，从其他文件复制来表格，然后我想另起一行写正文或标题，
+ * 142：原始诉求 ——「新建文件时，从其他文件复制来表格，然后我想另起一行写正文或标题，
  * 此时无法从下一行开始」。
  *
  * 复现出来是三件事叠在一起，缺一还坏，所以逐条钉：
@@ -154,7 +154,7 @@ test("打开以表格结尾的文件：末尾有那一行，但没改任何东�
 
   // 补出来的行存在
   expect(await 顶层块(page)).toEqual(["h1", "p", "table", "p"]);
-  // 恒等判据：这是**打开文件**，不是她改的 —— 脏点不该亮
+  // 恒等判据：这是**打开文件**，不是改动 —— 脏点不该亮
   await expect(page.getByTestId("tab-dirty")).toHaveCount(0);
 
   // 在那一行打字，才真的算改动

@@ -106,7 +106,7 @@ function menuRemove() {
 /* ---------------- 127：悬停 1 秒后把被截断的全名滚出来 ---------------- */
 
 /**
- * 她问这个方案合理不 —— 我的处理是「做，但补两处」：
+ * 问这个方案合理不 —— 我的处理是「做，但补两处」：
  * - **只对真的被截断的行启用**（`scrollWidth > clientWidth`），短名字不该动；
  * - **同时给原生 `title`（完整路径）当兜底**：移动中的字要眼睛追着读，长名字反而更难读全，
  *   跑马灯的价值是「让人知道这里还有字」，静止可读的那份交给 title；
@@ -186,7 +186,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
       （`page-outline` 这个 testid 留着：它指的是同一页，改名不该让回归测试跟着改地址。）
     -->
     <!--
-      127 第二批（她：「最近和导航各自增加图标，然后这里要再做的好看一点」）：
+ 127 第二批（要求：「最近和导航各自增加图标，然后这里要再做的好看一点」）：
       - 两颗页签各带一个**画出来的**图标（时钟 = 最近，缩进列表 = 导航），不用 emoji：
         emoji 的宽高与基线随字体档变，127 的齿轮与主题开关都为此返工过；
       - 选中态从「整块蓝底药丸」换成**底部一条 accent 下划线 + 文字图标同色**：
@@ -250,7 +250,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
     <div v-if="panel.page === 'recent'" class="sidebar__body" data-testid="recent-list">
       <p v-if="recent.items.length === 0" class="placeholder">{{ t("sidebar.emptyRecent") }}</p>
       <!--
-        127 第二批（她逐条点的）：
+ 127 第二批（逐条点的）：
         - **只显示文件名**：目录那一行删了（列表本来就该一眼扫名字，路径靠悬停与右键）；
         - 右键出菜单：复制路径 / 打开所在文件夹 / 置顶 / 移除；
         - 置顶与删除两颗按钮**与文件名居中对齐**（单行之后 `align-items: center` 才真的成立）；
@@ -384,7 +384,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
 }
 
 /*
- * 153（她 10-23：「继续加宽标签宽度和底部色条宽度，尽可能对齐下方滚动条左侧」，红框圈住这一行）：
+ * 153（10-23：「继续加宽标签宽度和底部色条宽度，尽可能对齐下方滚动条左侧」，红框圈住这一行）：
  * 两颗页签从「按内容宽 + 整组居中」改成**平分这一行**，右端让出收起把手那一格。
  *
  * 原来两侧各空 44px（页签 84px 一颗，落在 44→216），整条看着往中间缩，
@@ -392,7 +392,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
  * 下划线（色条）跟着从 60px 变到 ~99px。
  *
  * 为什么停在把手左缘（237）而不是滚动条左缘（~247）：那 22px 是「收起侧栏」的点击区，
- * 页签压上去就点不着了 —— 她说的是"尽可能"，这一格让得起。
+ * 页签压上去就点不着了 —— 说的是"尽可能"，这一格让得起。
  */
 .sidebar__tabs {
   display: flex;
@@ -406,7 +406,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
 }
 
 /*
- * 127 第二批（她：「各自增加图标，这里再做得好看一点」）：
+ * 127 第二批（要求：「各自增加图标，这里再做得好看一点」）：
  * 页签从「圆角药丸 + 蓝底」换成**图标 + 文字 + 底部一条 accent 下划线**，
  * 并且整颗顶满这一行（40px）—— 下划线才能落在行自己的底边上，不会浮在半空。
  * 为什么换：这一行的语义是「你现在看的是哪一页」，不是「按下去会执行什么」；
@@ -502,7 +502,7 @@ function flatten(nodes: HeadingItem[]): Array<{ node: HeadingItem; depth: number
 }
 
 /*
- * 127 第二批（她逐条点的）：一行只剩文件名，所以整行按**居中对齐**排；
+ * 127 第二批（逐条点的）：一行只剩文件名，所以整行按**居中对齐**排；
  * 目录与时间那行删了（要路径就悬停看 title 或右键复制）。
  */
 .recent__item {

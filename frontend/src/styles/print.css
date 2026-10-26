@@ -1,0 +1,197 @@
+/**
+ * 154：打印 / 导出 PDF 的纸面样式（`@media print`）。
+ *
+ * 已定的口径：**强制浅色纸面**，不跟随界面主题（Typora 在 Windows/Linux 也是只支持浅色打印）。
+ * 这条不是"把深色换成白色"那么简单，有三处必须一起处理，漏一处就打出一张废页：
+ *
+ * ① **布局是"内滚动"的**：界面用 `.shell / .pane / .pane__scroller` 撑满窗口高度、
+ *    正文在容器里滚。打印时如果不把这条链的高度与 `overflow` 放开，
+ *    纸上只有**当前视口那一屏**，后面的内容全都不存在（这是内滚动应用打印的头号坑）。
+ * ② **整篇缩放是写在 `.hp-doc` 的行内 `zoom` 上的**（025），行内样式压不住就得 `!important`；
+ *    不重置的话 110% 的文档打出来就是 110% 的纸面。
+ * ③ **屏幕上的交互控件不该进纸**：侧栏、标签栏、顶栏、底栏、查找条、
+ *    编辑工具栏、代码块工具条（语言下拉 / 复制 / 折叠 / 缩放键）、图上的提示行、
+ *    还有 149-C 给阅读档补的那条**空功能栏**与空提示行 —— 它们是为了两档等高而存在的装饰，
+ *    纸上没有"另一档"要对齐，留着就是每张图上面一条 33px 的空白。
+ *
+ * 已知限制（如实记，不藏）：深色档下 Mermaid 是按 dark 主题渲的（深底浅字），
+ * 打印不会重渲成浅色 —— 要好看的纸面，先切浅色档再打。自动切主题要等 Mermaid 异步重渲，
+ * 时序不稳（140 那条 rAF 的教训），所以这里不做。
+ */
+
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  /*
+   * ② 纸面调色板：把主题变量整体换成浅色那一套，正文所有用 var() 的规则跟着翻。
+   * 值**照抄 `style.css` 的 `[data-theme="light"]` 那一段**，不自己另调一版 ——
+   * 否则"浅色纸面"和"浅色档"会长出两个样子（`--hp-fg / --hp-rule / --hp-quote-bar`
+   * 是 `reading.css` 里对这几个的别名，改了源头它们自动跟）。
+   */
+  :root,
+  html[data-theme="dark"] {
+    --hp-bg: #ffffff;
+    --hp-surface: #ffffff;
+    --hp-border: #e2ddd3;
+    --hp-text: #2b2f36;
+    --hp-text-weak: #8a8f98;
+    --hp-accent: #274a7a;
+    --hp-on-accent: #ffffff;
+    --hp-hover: transparent;
+    --hp-selected: transparent;
+    --hp-code-bg: #f2efe9;
+    --hp-quote-bg: rgba(39, 74, 122, 0.04);
+    --hp-error: #b3261e;
+    --hp-error-bg: #ffffff;
+    --hp-error-border: #e5c1bd;
+    --hp-shadow: transparent;
+    background: #fff !important;
+    color: #2b2f36 !important;
+  }
+
+  /* ① 放开内滚动那条链：让整篇按纸高自然流动 */
+  html,
+  body,
+  .shell,
+  .shell__body,
+  .pane,
+  .pane__scroller,
+  .read-pane,
+  .edit-pane,
+  .edit-pane__scroll,
+  .source-pane {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* ② 整篇缩放归一（行内 zoom 必须用 !important 才压得住） */
+  .hp-doc {
+    zoom: 1 !important;
+    /* 宽度档（标准/宽/超宽/全宽）在纸上没有意义：纸有多宽就排多宽 */
+    max-width: none !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* ③ 屏幕控件一律不进纸 */
+  .topbar,
+  .tabbar,
+  .statusbar,
+  .sidebar,
+  .rail,
+  .searchbar,
+  .dropzone,
+  .menu,
+  .menu-mask,
+  .hp-lightbox,
+  .mask,
+  .edit-toolbar,
+  .hp-codebox__bar,
+  .hp-code__bar,
+  .hp-codebox__fold,
+  .hp-codebox__zoom,
+  .hp-codebox__lang,
+  .hp-codebox__hint,
+  .hp-mermaidbox__hint,
+  .hp-mermaid__bar,
+  .hp-dismiss,
+  .hp-code__copy,
+  .hp-toc__title,
+  .toast,
+  .pane__empty,
+  .pane__error {
+    display: none !important;
+  }
+
+  /* 表格：跨页时表头每页重复，行不被腰斩 */
+  thead {
+    display: table-header-group !important;
+  }
+
+  tr,
+  pre,
+  blockquote,
+  .hp-codebox,
+  .hp-mermaid,
+  .hp-mathblock,
+  .hp-fndef,
+  .hp-callout,
+  li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /*
+   * 157：提示块那五种颜色是**按档分两套变量**画的（深底上要提亮才看得清）。
+   * 纸面既然是浅色，就得把深色档那套也压回浅色那套 —— 否则深色档下按打印，
+   * 白纸上是一行 2.7:1 的浅蓝字。`--hp-co` 定在元素自己身上，
+   * 上面那条 `:root` 的兜底管不到它，只能逐个类型重写。
+   */
+  html[data-theme="dark"] .hp-callout--note,
+  .hp-callout--note {
+    --hp-co: #3565b8;
+    --hp-co-bg: rgba(53, 101, 184, 0.09);
+  }
+  html[data-theme="dark"] .hp-callout--tip,
+  .hp-callout--tip {
+    --hp-co: #2f7d51;
+    --hp-co-bg: rgba(47, 125, 81, 0.09);
+  }
+  html[data-theme="dark"] .hp-callout--important,
+  .hp-callout--important {
+    --hp-co: #6a4bab;
+    --hp-co-bg: rgba(106, 75, 171, 0.09);
+  }
+  html[data-theme="dark"] .hp-callout--warning,
+  .hp-callout--warning {
+    --hp-co: #9a6b12;
+    --hp-co-bg: rgba(154, 107, 18, 0.11);
+  }
+  html[data-theme="dark"] .hp-callout--caution,
+  .hp-callout--caution {
+    --hp-co: #b3261e;
+    --hp-co-bg: rgba(179, 38, 30, 0.09);
+  }
+
+  /* 标题别落在页面最后一行（下面没正文，孤零零一条） */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* 屏幕上的横向滚动容器（超宽的图）在纸上放开，靠 Mermaid 自身尺寸缩到页宽 */
+  .hp-mermaidbox__svg,
+  .hp-mermaid,
+  .hp-codebox > pre {
+    overflow: visible !important;
+  }
+
+  /* 深色档渲出来的图打到白纸上会带一块深底：给它一条边，至少不糊在纸边 */
+  .hp-mermaid svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* 链接：纸上没有"可点"，颜色保留但去掉下划线的脏感 */
+  a {
+    color: #1a4d8f !important;
+    text-decoration: none;
+  }
+
+  /* 代码块行号在纸上有用（对得上行），保留；但复制按钮那条已经藏了 */
+  body {
+    /* WebView2 打印时 body 背景默认不画，这里显式给白底避免深色档残留 */
+    background: #fff !important;
+    color: #2b2f36 !important;
+  }
+}

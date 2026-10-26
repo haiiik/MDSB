@@ -1,18 +1,18 @@
 {
   "fixed": {
-    "file_version": "1.0.1",
-    "product_version": "1.0.1"
+    "file_version": "1.0.4",
+    "product_version": "1.0.4"
   },
   "info": {
     "0000": {
       "CompanyName": "MDStar",
       "FileDescription": "MDStar - Markdown Star Browser",
-      "FileVersion": "1.0.1",
+      "FileVersion": "1.0.4",
       "InternalName": "mdsb",
       "LegalCopyright": "",
       "OriginalFilename": "MDStar.exe",
       "ProductName": "MDStar",
-      "ProductVersion": "1.0.1"
+      "ProductVersion": "1.0.4"
     }
   }
 }

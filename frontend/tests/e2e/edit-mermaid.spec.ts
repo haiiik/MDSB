@@ -27,7 +27,7 @@ async function seedAndOpen(page: Page, doc: string) {
   await setMode(page, "edit");
   await page.waitForSelector(".hp-codebox");
   /*
-   * 145 之后 Mermaid 的源码**默认整段收起**（她：「隐藏的再彻底一点，点了编辑源码再展开」），
+   * 145 之后 Mermaid 的源码**默认整段收起**（要求：「隐藏的再彻底一点，点了编辑源码再展开」），
    * 而这一份用例钉的是 110 那件事 ——「点开即改、原地重绘」，前提是源码看得见点得进。
    * 所以这里先把源码展开（收起与展开本身由 `edit-code-fold-145.spec.ts` 那 8 条管，不重复）。
    */
