@@ -20,7 +20,7 @@ const 图源码 = ["flowchart LR", "  A[受理] --> B[形式审查] --> C[会签
 
 const DOC = ["# 两档同高", "", "```mermaid", 图源码, "```", "", "图后面的正文。", ""].join("\n");
 
-type 量 = { 块: number; 图宽: number; 图高: number; 顶: number; 钮: number; 下拉: number };
+type 量 = { 块: number; 图宽: number; 图高: number; 顶: number; 钮: number; 缩放钮: number; 下拉: number };
 
 const 量图 = (page: Page): Promise<量> =>
   page.evaluate(() => {
@@ -36,6 +36,8 @@ const 量图 = (page: Page): Promise<量> =>
       图高: Math.round(svg.getBoundingClientRect().height),
       顶: Math.round(svg.getBoundingClientRect().top),
       钮: 块.querySelectorAll("button").length,
+      // 161：那组缩放键（两档各自的名字）—— 用来把"栏里除了它不许有别的按钮"钉死
+      缩放钮: 块.querySelectorAll('[data-testid="rd-mermaid-zoom"] button, [data-testid="pm-mermaid-zoom"] button').length,
       下拉: 块.querySelectorAll("select").length,
     };
   });
@@ -83,10 +85,18 @@ test("图在两块里的位置一致（壳同形 = 图不上跳）", async ({ pa
   ).toBeLessThanOrEqual(1);
 });
 
-test("阅读档那条是装饰栏：里面没有能点的控件", async ({ page }) => {
+test("阅读档那条栏只放「怎么看」的控件，不放编辑类控件", async ({ page }) => {
+  /*
+   * 149-C 原本钉的是"里面一个控件都没有"（那条栏是补高度的空栏）。
+   * 161（「阅读模式的 mermaid 加上缩放功能」）改了这条口径：栏上现在摆着 146-A 那三颗缩放键。
+   * 所以判据**收窄而不是删** —— 要防的事没变（只读档里不许出现改文档的控件），
+   * 变的只是允许的集合：`− 100% +` 这三颗是"怎么看"，一个字节都不进文档（161 的 spec 钉着）。
+   * 于是这里钉两件：① 栏里除那三颗以外不许有别的按钮；② 语言下拉这类编辑档控件一个都不许漏进来。
+   */
   await 打开(page);
   const 阅 = await 量图(page);
-  expect(阅.钮, "阅读档的空功能栏里摆了按钮（阅读档是只读档）").toBe(0);
+  expect(阅.缩放钮, "阅读档这条栏上没摆那三颗缩放键（161）").toBe(3);
+  expect(阅.钮 - 阅.缩放钮, `阅读档栏里混进了编辑类控件（共 ${阅.钮} 颗按钮）`).toBe(0);
   expect(阅.下拉, "阅读档的空功能栏里有语言下拉").toBe(0);
   // 编辑档那两处是真控件，对照着钉一条：空栏不是把编辑档的控件复制过来
   await setMode(page, "edit");

@@ -227,7 +227,9 @@ const zh = {
   "mermaid.wouldBreak": "这段文字里有双引号，还有「{text}」会提前结束标签的字符，直接写会破坏图的结构。请切源码模式改。",
   // 159：改字给两条路 —— 只改显示 / 一起改名（按钮文案与四条拒绝理由）
   "mermaid.displayOnly": "只改显示",
+  "mermaid.displayOnlyHint": "只换这一段显示文字，别处引用它的地方不动（按回车也是这个）",
   "mermaid.renameButton": "一起改名 {count} 处",
+  "mermaid.renameHint": "把这个名字在整张图里一起换：声明与所有引用位都改，显示文字里的同名一个字节不动",
   "mermaid.renameUnsupported": "这类图的标识符规则还没摸清，为了不改坏图没有写入。请在下面的源码里改。",
   "mermaid.renameBadId": "「{name}」不能当名字用：只能是字母、数字、下划线或汉字，中间不带空格和括号。",
   "mermaid.renameNotFound": "源码里没找到这个名字，没有写入。可能是图刚被别处改过，请重新双击。",

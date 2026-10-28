@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aliasTextOf,
   applyAliasSet,
   applyIdentifierRename,
+  findTextSpans,
+  pairSpansByOrder,
+  renameTargetOf,
   scanIdentifierOccurrences,
+  scanMermaidLabels,
 } from "../../src/kernel/mermaidLabels";
 
 /**
@@ -193,5 +198,178 @@ describe("159③：拿不准就拒绝，且一个字都不改", () => {
     const before = 'erDiagram\n  CUSTOMER ||--o{ ORDER : "CUSTOMER 与 ORDER 都提到"';
     const r = applyIdentifierRename(before, "CUSTOMER", "CLIENT");
     expect(r.ok && r.src).toBe('erDiagram\n  CLIENT ||--o{ ORDER : "CUSTOMER 与 ORDER 都提到"');
+  });
+});
+
+/**
+ * 159 片 2 的纯函数层：双击的那一处**背后有没有标识符**。
+ *
+ * 界面按这张表决定摆几颗键（不可用的那颗干脆不摆），所以这一层判错 = 界面上摆错键，
+ * 也 = 「一起改名」改错东西。三条口径：
+ * ① 节点标签（flowchart `A[起步]`）背后是 `A`，但改的是名字、不是这段文字 → `self: false`；
+ * ② 双击的那段字本身就是标识符（ER 实体头、state 状态名）→ `self: true`，
+ *    这时「只改显示」走别名那条路（`applyAliasSet`），不是把标识符本身换掉；
+ * ③ 边标签、ER 属性行、note 正文这类**背后没有标识符**的一律 `null` —— 界面只给一颗键。
+ */
+describe("159②：双击位置背后的标识符", () => {
+  const flow = "flowchart LR\n  A[起步] --> B[读 A 的值]\n  B --> A";
+  const label = (src: string, text: string) => {
+    const s = scanMermaidLabels(src).find((x) => x.text === text);
+    if (!s) throw new Error(`夹具里没有这段标签：${text}`);
+    return s;
+  };
+
+  it("flowchart 节点标签 → 给得出节点名与处数，self=false（改的是名字不是文字）", () => {
+    const r = renameTargetOf(flow, label(flow, "起步"));
+    expect(r).not.toBeNull();
+    expect(r!.id).toBe("A");
+    // 声明头的 A + `B --> A` 的 A = 2 处；`B[读 A 的值]` 那个 A 在标签正文里，不算
+    expect(r!.count, "处数只能数标识符语法位").toBe(2);
+    expect(r!.self).toBe(false);
+  });
+
+  it("flowchart 边标签 `A -->|起步| B` → null（边上没有自己的标识符）", () => {
+    const src = "flowchart LR\n  A -->|起步| B";
+    const r = renameTargetOf(src, label(src, "起步"));
+    expect(r).toBeNull();
+  });
+
+  it("ER 实体头 `CUSTOMER {` → self=true（双击的就是标识符本身）", () => {
+    const src = 'erDiagram\n  CUSTOMER {\n    string 编号 PK\n  }\n  CUSTOMER ||--o{ ORDER : "下单"';
+    const r = renameTargetOf(src, label(src, "CUSTOMER"));
+    expect(r).not.toBeNull();
+    expect(r!.id).toBe("CUSTOMER");
+    expect(r!.self).toBe(true);
+    expect(r!.count, "块头 + 关系行两端各一处").toBe(2);
+  });
+
+  it("ER 带别名的实体头 `CUSTOMER[\"客户\"]` → 名字取定界符前面那段，不是整串", () => {
+    const src = 'erDiagram\n  CUSTOMER["客户"] {\n    string 编号\n  }\n  CUSTOMER ||--o{ ORDER : "下单"';
+    const r = renameTargetOf(src, label(src, 'CUSTOMER["客户"]'));
+    expect(r, "整串带括号不是合法标识符，要认前面那段名字").not.toBeNull();
+    expect(r!.id).toBe("CUSTOMER");
+    expect(r!.self).toBe(true);
+  });
+
+  it("state 的 `state \"描述\" as S2` → 背后是 S2，self=false", () => {
+    const src = 'stateDiagram-v2\n  state "等待受理" as S2\n  S2 --> S3 : go';
+    const s = scanMermaidLabels(src).find((x) => x.text === "等待受理")!;
+    const r = renameTargetOf(src, s);
+    expect(r).not.toBeNull();
+    expect(r!.id).toBe("S2");
+    expect(r!.self).toBe(false);
+  });
+
+  it("sequence 的 `participant A as 报销单` → 背后是 A（走通用倒查那条路也要认得出）", () => {
+    const src = "sequenceDiagram\n  participant A as 报销单\n  A->>B: 提交";
+    const g = findTextSpans(src, "报销单");
+    expect(g.length, "夹具本身要能定位到一段").toBe(1);
+    const r = renameTargetOf(src, g[0]);
+    expect(r).not.toBeNull();
+    expect(r!.id).toBe("A");
+    expect(r!.self).toBe(false);
+  });
+
+  it("ER 属性行（类型名 / 属性名 / 键标记）→ null：那是另一个命名空间，不跟着实体改名", () => {
+    const src = 'erDiagram\n  CUSTOMER {\n    string 编号 PK "客户编号"\n  }';
+    for (const text of ["string", "编号", "PK"]) {
+      const s = scanMermaidLabels(src).find((x) => x.text === text);
+      if (!s) continue;
+      expect(renameTargetOf(src, s), `${text} 不该给出改名键`).toBeNull();
+    }
+  });
+
+  it("state 迁移标签 `S2 --> S3 : go` → null（那是文字，不是标识符）", () => {
+    const src = "stateDiagram-v2\n  S2 --> S3 : go";
+    const r = renameTargetOf(src, label(src, "go"));
+    expect(r).toBeNull();
+  });
+
+  it("图类型不认识（journey / pie）→ 一律 null，界面不摆第二颗键", () => {
+    const src = "journey\n  title 我的旅程\n  写草稿: 5: 甲";
+    const s = findTextSpans(src, "写草稿")[0];
+    expect(s, "夹具要拿得到").toBeTruthy();
+    expect(renameTargetOf(src, s)).toBeNull();
+  });
+
+  it("名字在这一版源码里已经找不到标识符位 → null（别摆一颗点下去必然拒绝的键）", () => {
+    const src = "flowchart LR\n  A[起步]";
+    const s = { ...label(src, "起步"), id: "GONE" };
+    expect(renameTargetOf(src, s)).toBeNull();
+  });
+});
+
+/**
+ * 双击标识符时，编辑区里摆的必须是**显示名**，不是那串源码 token ——
+ * 否则用户改完落盘的是「别名里塞着一整串带括号的名字」。
+ */
+describe("159②：编辑区里摆的是显示名", () => {
+  const er = (token: string) => {
+    const src = `erDiagram\n  ${token} {\n    string 编号\n  }`;
+    const s = scanMermaidLabels(src).find((x) => x.kind === "id");
+    if (!s) throw new Error(`夹具没解析出实体头：${token}`);
+    return s;
+  };
+
+  it('带引号别名 `CUSTOMER["客户"]` → 剥出 客户', () => {
+    const s = er('CUSTOMER["客户"]');
+    expect(aliasTextOf(s, "CUSTOMER")).toBe("客户");
+  });
+
+  it('不带引号别名 `CUSTOMER[客户]` → 也剥出 客户', () => {
+    const s = er("CUSTOMER[客户]");
+    expect(aliasTextOf(s, "CUSTOMER")).toBe("客户");
+  });
+
+  it("还没有别名 → 摆名字本身（用户输入的新文字就是第一个显示名）", () => {
+    const s = er("CUSTOMER");
+    expect(aliasTextOf(s, "CUSTOMER")).toBe("CUSTOMER");
+  });
+
+  it("名字与别名两条路互不污染：剥出来的那段不含方括号", () => {
+    const s = er('ORDER["订单 主表"]');
+    const text = aliasTextOf(s, "ORDER");
+    expect(text).toBe("订单 主表");
+    expect(text.includes("[")).toBe(false);
+  });
+});
+
+/**
+ * 159 片 3：同一段文字出现在多处时的「第 k 个元素 ↔ 第 k 个区间」配对。
+ * 两条自证缺一不可：数量相等、**逐对文字相同** —— 后者专防"mermaid 换了渲染顺序"，
+ * 顺序一乱就整组退回不给改，而不是把改动写到别的那一处上。
+ */
+describe("159③：多处同文的配对", () => {
+  const src = "sequenceDiagram\n  甲->>乙: 重复\n  乙->>甲: 重复";
+  const pool = findTextSpans(src, "重复");
+
+  it("夹具：源码里正好两处", () => {
+    expect(pool.length).toBe(2);
+  });
+
+  it("数量相等且逐对文字相同 → 一一对上（第二处给第二个区间）", () => {
+    const 配 = pairSpansByOrder(["重复", "重复"], pool);
+    expect(配.length).toBe(2);
+    expect(配[0]).toBe(pool[0]);
+    expect(配[1]).toBe(pool[1]);
+    expect(src.slice(配[1]!.from, 配[1]!.to)).toBe("重复");
+    expect(pool[0].from, "两处区间不是同一个").not.toBe(pool[1].from);
+  });
+
+  it("数量不等 → 整组 null（宁可少认，不可错认）", () => {
+    expect(pairSpansByOrder(["重复"], pool)).toEqual([null]);
+    expect(pairSpansByOrder(["重复", "重复", "重复"], pool)).toEqual([null, null, null]);
+    expect(pairSpansByOrder([], [])).toEqual([]);
+  });
+
+  it("顺序被打乱（逐对文字对不上）→ 整组 null，不写错地方", () => {
+    const 乱 = [pool[1], pool[0]];
+    const texts = ["甲说的那句", "重复"];
+    const 假 = [
+      { ...pool[1], text: "重复" },
+      { ...pool[0], text: "甲说的那句" },
+    ];
+    expect(pairSpansByOrder(texts, 假)).toEqual([null, null]);
+    expect(乱.length).toBe(2);
   });
 });

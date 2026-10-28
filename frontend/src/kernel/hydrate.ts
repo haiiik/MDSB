@@ -10,6 +10,11 @@ export interface HydrateOptions {
   /** 当前文档的绝对路径；未保存文档传 null，此时相对图片无法解析 */
   sourcePath: string | null;
   host: Host;
+  /**
+   * 161：这一篇的标签页标识。Mermaid 每张图的缩放倍率按它存（口径见 `mermaidZoom.ts`），
+   * 必须与编辑档 `codeBlockNodeView` 拿到的那个是**同一个值**，否则两档各存一份倍率。
+   */
+  tabKey: string;
 }
 
 /**
@@ -26,7 +31,7 @@ export async function hydrate(root: HTMLElement, opts: HydrateOptions): Promise<
   // 而 `enhanceImages` 会给图挂 error 监听，两者碰的是同一批子节点，先做形状再做监听少一类交叉。
   enhanceCallouts(root);
   enhanceImages(root, opts.host);
-  await hydrateMermaid(root, { theme: opts.theme });
+  await hydrateMermaid(root, { theme: opts.theme, tabKey: opts.tabKey });
   // 138：公式。放最后一步是有意的 —— 它只在文档真有 `$…$` 时才动态取 KaTeX，
   // 而图片/代码/目录/图这些不依赖它，别让它把前面几步排在后面。
   await hydrateMath(root);

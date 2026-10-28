@@ -386,7 +386,7 @@ watch(
       ensureDomAdapter(true);
       // 图片与 Mermaid 出图会撑高内容：此刻再回位一次，
       // 否则会话恢复的滚动位置会被提前夹小（实测存 933 却停在顶部）
-      void hydrate(documentRoot.value, { theme: view.theme, sourcePath: tab.path, host: h }).then(() => {
+      void hydrate(documentRoot.value, { theme: view.theme, sourcePath: tab.path, host: h, tabKey: tab.id }).then(() => {
         if (activeTab.value?.id === tab.id && tab.mode === "read") {
           restoreScroll("read");
           syncActiveHeading();

@@ -71,13 +71,21 @@ test("erDiagram：属性注释能双击改，且只有那一处变", async ({ pa
     .toBe(before.replace('"立项金额"', '"立项金额（含税）"'));
 });
 
-test("erDiagram：实体名不给改，并说清为什么", async ({ page }) => {
+test("erDiagram：实体名现在开编辑，给的是两颗键（159 片 2 改了口径）", async ({ page }) => {
+  /*
+   * 126 原本的判据是「实体名不给改，只给理由」。159 把它推进成**两颗键**：
+   * 「只改显示」写别名（名字与所有引用位不动）、「一起改名」连名字一起换。
+   * 老判据里"不许悄悄改坏"这一半仍然有效，所以这里钉的是**取消之后源码一字不动**，
+   * 而不是删掉这条。
+   */
   await openEdit(page, ER, "实体名");
   const before = await 源码块(page).innerText();
-  await page.locator('.hp-mermaidbox [data-hp-label="no"]', { hasText: "采购申请" }).first().dblclick({ timeout: 8000 });
+  await page.locator('.hp-mermaidbox [data-hp-label="1"]', { hasText: "采购申请" }).first().dblclick({ timeout: 8000 });
+  await expect(page.locator('.hp-mermaidbox [contenteditable="true"]')).toHaveCount(1, { timeout: 5000 });
+  await expect(page.locator('[data-testid="pm-mermaid-display"]')).toBeVisible();
+  await expect(page.locator('[data-testid="pm-mermaid-rename"]')).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
-  expect(await page.locator('.hp-mermaidbox [contenteditable="true"]').count()).toBe(0);
-  await expect(page.locator(".hp-mermaidbox__hint")).toContainText("实体名");
   expect(await 源码块(page).innerText()).toBe(before);
 });
 
@@ -92,18 +100,31 @@ test("erDiagram：属性名里打空格会被拒绝（会把一行拆成两个 t
   expect(await 源码块(page).innerText()).toBe(before);
 });
 
-test("stateDiagram：迁移标签能改，状态名不给改", async ({ page }) => {
+test("stateDiagram：迁移标签能改；状态名给两颗键（159 片 2 改了口径）", async ({ page }) => {
   await openEdit(page, STATE, "迁移标签");
   await dblclickText(page, "审批通过");
   await page.keyboard.type("审批放行", { delay: 40 });
   await page.keyboard.press("Enter");
   await expect.poll(() => 源码块(page).innerText(), { timeout: 5000 }).toContain("审核中 --> 已完成: 审批放行");
+  /*
+   * 源码变了不等于图重绘完了：Mermaid 有 250ms 防抖，双击打在**即将被替换的旧节点**上，
+   * 第二个 click 落在孤儿上 → 编辑态根本不开（并行满载时最容易撞上，本轮全量就在这条红过一次）。
+   * 判据要等"变成了什么"：等新文字真的挂在图上，再双击下一处。
+   */
+  await expect
+    .poll(() => page.locator('.hp-mermaidbox [data-hp-label="1"]', { hasText: "审批放行" }).count(), {
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(0);
 
   const 改后 = await 源码块(page).innerText();
   await page.locator(".hp-mermaidbox g.node", { hasText: "草稿" }).first().dblclick({ timeout: 8000 });
+  await expect(page.locator('.hp-mermaidbox [contenteditable="true"]')).toHaveCount(1, { timeout: 5000 });
+  await expect(page.locator('[data-testid="pm-mermaid-display"]')).toBeVisible();
+  await expect(page.locator('[data-testid="pm-mermaid-rename"]')).toBeVisible();
+  // 不提交就一个字不动（"状态名不许悄悄改一处"这半条口径仍然算数）
+  await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
-  expect(await page.locator('.hp-mermaidbox [contenteditable="true"]').count()).toBe(0);
-  await expect(page.locator(".hp-mermaidbox__hint")).toContainText("状态名");
   expect(await 源码块(page).innerText()).toBe(改后);
 });
 

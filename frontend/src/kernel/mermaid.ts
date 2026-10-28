@@ -3,6 +3,7 @@ import { addDismiss, openSvgLightbox } from "./enhance";
 import { attachRightButtonPan } from "./panDrag";
 import { t } from "../i18n";
 import { createTextMeasurer, preWrapMermaid } from "./mermaidLabels";
+import { 建缩放控件, 缩放键 as 拼缩放键 } from "./mermaidZoom";
 
 /**
  * Mermaid 渲染。
@@ -67,6 +68,12 @@ async function loadMermaid(theme: ThemeName) {
 
 export interface MermaidOptions {
   theme: ThemeName;
+  /**
+   * 161：这一篇的标签页标识，用来给「每张图自己的缩放倍率」定位到哪一格。
+   * 编辑档传的是 `tab.id`（146 起就是它），阅读档必须传**同一个值**，
+   * 否则两档各存一份倍率 —— 同一个功能两份状态（口径见 `mermaidZoom.ts` 头上那段）。
+   */
+  tabKey?: string;
 }
 
 export interface MermaidResult {
@@ -245,7 +252,8 @@ export async function hydrateMermaid(root: HTMLElement, opts: MermaidOptions): P
 
   let done = 0;
 
-  for (const code of blocks) {
+  for (let 序 = 0; 序 < blocks.length; 序++) {
+    const code = blocks[序];
     const source = code.textContent ?? "";
     const target = (code.closest("pre") ?? code) as HTMLElement;
 
@@ -257,16 +265,18 @@ export async function hydrateMermaid(root: HTMLElement, opts: MermaidOptions): P
     const result = await renderMermaid(source, opts.theme);
     if (result.svg) {
       /*
-       * 149-C：阅读档这块**照编辑档的形状搭**（空功能栏 + 空提示行 + 图），
+       * 149-C：阅读档这块**照编辑档的形状搭**（功能栏 + 空提示行 + 图），
        * 而不是只把 svg 塞进去。为什么：编辑档那块 143px、阅读档 94px，
        * 图本身两档一模一样大（708×70），差的 49px 全是编辑档的功能栏与提示行 ——
        * 于是同一篇文档切个模式，每张图下面的正文都上下跳一次。
        * 已定的口径：「让低的兼容高的，两个图整体大小一致（编辑模式包括功能栏）」。
        * 空栏/空提示的高度走 CSS 变量，与编辑档那两处**同源**（见 style.css 的 --hp-codebar-h）。
+       *
+       * 161：这条栏不再是空的了 —— 编辑档功能栏右端那组缩放键（146-A）在这里也摆一份。
+       * 栏还是同一条、高度还是同一个 token，所以 149-C 那条"两档整块等高"不会因为这组键而破。
        */
       const bar = document.createElement("div");
       bar.className = "hp-codebox__bar hp-mermaid__bar";
-      bar.setAttribute("aria-hidden", "true");
 
       const hint = document.createElement("p");
       hint.className = "hp-mermaidbox__hint";
@@ -278,6 +288,42 @@ export async function hydrateMermaid(root: HTMLElement, opts: MermaidOptions): P
       host.className = "hp-mermaidbox__svg";
       // 151：图比正文宽时，**按住右键拖**就把那段溢出滑出来（左键仍留给选字）
       attachRightButtonPan(host);
+
+      /*
+       * 161（要求：「阅读模式的 mermaid 加上缩放功能」）：这条栏右端摆的就是 146-A 那三颗键，
+       * **不是新做一套缩放** —— 键的构造、档位表、倍率那张表都在 `mermaidZoom.ts`，
+       * 编辑档调的是同一个 `建缩放控件`。两档认同一个键（标签页 + 第几张图），
+       * 所以「阅读档放大这张图 → 切到编辑档」看到的还是那一档，反过来也一样。
+       *
+       * 倍率作用在 `host`（`.hp-mermaidbox__svg`）上，与编辑档同一格：
+       * 用 CSS `zoom` 不用 `transform`（146 实测 transform 不改布局盒，下面的正文不会被顶开）；
+       * 也因此**不会带进灯箱** —— 灯箱拿的是 svg 的克隆，缩放挂在外层容器上，
+       * 大图里永远从原尺寸起步（127 那条"看全貌"的语义不该被这篇里调过的倍率污染）。
+       */
+      const 缩放 = 建缩放控件({
+        // 没给标签页 = 认不出这是哪一篇的哪一张图，宁可不记倍率（读回 100%，也不挂到别篇去）
+        键: () => (opts.tabKey ? 拼缩放键(opts.tabKey, 序) : ""),
+        图: () => host,
+        testid: {
+          组: "rd-mermaid-zoom",
+          缩小: "rd-mermaid-zoom-out",
+          倍率: "rd-mermaid-zoom-reset",
+          放大: "rd-mermaid-zoom-in",
+        },
+      });
+      bar.append(缩放.dom);
+      /*
+       * 栏里现在有真能点的键了，`aria-hidden` 必须去掉 —— 挂着它等于把控件对读屏藏起来，
+       * 而键还在原地能聚焦（152 那条同一类：别对"没人看得见的东西"做处理）。
+       *
+       * 这条 dblclick 是必需的：下面 `box` 上那颗"双击图 → 灯箱"会收到从栏里冒上来的双击，
+       * 于是**连点两次「放大」= 放大一档 + 顺手弹一张大图**（同一个手势两种含义，127 一直在躲的那种）。
+       * 栏是控件区、不是图，双击它不该有语义。
+       */
+      bar.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+      });
 
       const stage = document.createElement("div");
       stage.className = "hp-mermaidbox";
@@ -291,8 +337,12 @@ export async function hydrateMermaid(root: HTMLElement, opts: MermaidOptions): P
        * 游离元素没有计算样式（`getComputedStyle` 拿回来是初始值，`fill` 甚至是 `none`），
        * 于是"没有不合格"永远成立 —— **一条也没修，而"不许改坏"那半边判据照样绿**。
        * 兜底类功能必须钉"修了几处 / 每个节点都得及格"，不能只钉"没弄坏"。
+       *
+       * 161 同一顺序纪律：`缩放.刷新()` 也放在挂载之后 —— 它写的是 `zoom`，
+       * 而判据量的是**放大后的图有多宽**，游离状态下量不到真尺寸。
        */
       装入图(host, result.svg);
+      缩放.刷新();
       /*
        * 127（要求：「应用架构图很大，无法看到全貌，这种图应该给我单独缩放功能」）：
        * **阅读模式双击图 → 进灯箱，在里面滚轮缩放 + 拖拽平移**。

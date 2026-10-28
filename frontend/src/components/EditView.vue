@@ -414,7 +414,14 @@ function revealImages() {
     }
   }
   void getHost().then((h) => {
-    if (article) void resolveImages(article, { theme: props.theme, sourcePath: activePath.value, host: h });
+    if (article)
+      void resolveImages(article, {
+        theme: props.theme,
+        sourcePath: activePath.value,
+        host: h,
+        // 161：这一份用的是与阅读档 `hydrate` 同一个标签页标识（图片增强不吃它，Mermaid 的倍率吃）
+        tabKey: props.tabId ?? "",
+      });
   });
 }
 

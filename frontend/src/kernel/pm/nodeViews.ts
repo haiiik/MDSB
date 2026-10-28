@@ -4,14 +4,21 @@ import { Plugin, TextSelection, type EditorState } from "prosemirror-state";
 import { t, tf } from "../../i18n";
 import { paintMath } from "../math";
 import { renderMermaid, 装入图 } from "../mermaid";
+import { 建缩放控件, 缩放键 as 拼缩放键 } from "../mermaidZoom";
 import { addDismiss } from "../enhance";
 import { attachRightButtonPan } from "../panDrag";
 import {
+  aliasTextOf,
+  applyAliasSet,
+  applyIdentifierRename,
   applyLabelEdit,
   findTextSpans,
   labelToEditableHtml,
+  pairSpansByOrder,
+  renameTargetOf,
   scanMermaidLabels,
   type LabelSpan,
+  type RenameTarget,
 } from "../mermaidLabels";
 import { HP_STEP_META } from "./history";
 import type { ThemeName } from "../render";
@@ -176,15 +183,12 @@ function 挂折叠(a: {
 }
 
 /**
- * 146-A：**每张 Mermaid 图自己的缩放倍率**。
+ * 146-A / 161：**每张 Mermaid 图自己的缩放倍率** —— 表与档位都搬到 `kernel/mermaidZoom.ts`。
  *
- * 要求的是"这一张图放大一点"，不是整篇文档的缩放（025 那颗管的是后者）。
- * 倍率**不进文档**：它是视图属性，写进 .md 就是污染原文（保真口径）。
- * 键 = 标签页 + 该块的源区间，所以换模式、换标签回来还是调过的那一档；
- * 没有源区间的块（刚粘贴进来的）不认，从 100% 起。
+ * 为什么搬：161 要「阅读模式的 mermaid 也加上缩放」。同一个功能在两档各存一份倍率，
+ * 就会出现「阅读档把这张图放大、切到编辑档又变回原样」—— 两处真相（本项目在这条上栽过好几次，
+ * 最近的是「预览与插入不许各拼一次」）。倍率、档位、那三颗键的构造都只留一份，两档各自只负责挂上。
  */
-const 图缩放 = new Map<string, number>();
-const 缩放档 = [0.3, 0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
 /** 145：有源码可看才收（空源码那块没东西可藏，别摆一颗点不动的键） */
 function 源码可折(n: PMNode): boolean {
@@ -218,6 +222,12 @@ interface EditableLabel {
   span: LabelSpan | null;
   /** span 为 null 时给得出**具体**拒绝理由（标识符 / 位置不唯一），不说空话 */
   reason?: string;
+  /**
+   * 159 片 2：这一处背后有没有标识符。
+   * 有 → 编辑态给两颗键（「只改显示」+「一起改名 N 处」）；没有 → 只给一颗，
+   * **不给摆一颗点下去必然被拒绝的键**（不可用的选项干脆不摆）。
+   */
+  rename?: RenameTarget | null;
   /**
    * 127：这段文字是 **SVG `<text>`**（sequence / pie / gantt / timeline 都是）。
    * `contentEditable` 在 SVG 元素上根本不存在（探针实测 `"contentEditable" in t === false`，
@@ -348,6 +358,23 @@ export function editableLabels(svg: SVGSVGElement, source: string): EditableLabe
   const textSpans = spans.filter((s) => s.kind === "text");
   const idSpans = spans.filter((s) => s.kind === "id");
   /*
+   * 159 片 3：同一段文字在源码里有好几处时，**先攒着**，等这一组的元素全收集完再配对。
+   * 边扫边判只能得到 127 那套旧口径（"多次 = 有歧义，整组拒"），代价是
+   * 两条一模一样的消息、两格一模一样的注释根本改不动。
+   * 攒下的每一项带着它当时那一份候选池，配对在循环之后按「第 k 个元素 ↔ 第 k 个区间」做。
+   */
+  interface 待定项 {
+    box: HTMLElement;
+    hit: HTMLElement;
+    target: LabelTarget;
+    viaOverlay?: boolean;
+    text: string;
+    /** 分组键：同文同角色才配到一组（generic 那条没有角色，键里就只放文字） */
+    key: string;
+    pool: LabelSpan[];
+  }
+  const 待定: 待定项[] = [];
+  /*
    * 选择器为什么带 `text`：sequence / pie / gantt / timeline 这四类的字是**SVG 文字**，
    * 没有 foreignObject（探针实测 sequence 的 `messageText`、pie 的图例、timeline 的节点名全是 `<text>`）。
    * 只查 foreignObject 的话，「都支持」这件事根本无从谈起。
@@ -380,15 +407,18 @@ export function editableLabels(svg: SVGSVGElement, source: string): EditableLabe
       continue;
     }
     if (found.length > 1) {
-      out.push({ box, hit: html, target, span: null, reason: t("mermaid.ambiguousMatch") });
+      // 片 3：这一组先攒起来，配对后各拿自己那一个区间
+      待定.push({ box, hit: html, target, viaOverlay, text, key: "typed|" + text + "|" + (role ?? ""), pool: found });
       continue;
     }
     /*
      * 127：类型专属的解析没命中（`scanXxx` 只写了 flowchart / ER / state），
-     * 退到**通用倒查** —— 屏幕上这行字在源码里**只出现一次**就认，多次或零次都拒绝。
+     * 退到**通用倒查** —— 屏幕上这行字在源码里只出现一次就直接认。
+     * 159 片 3 之后**多次不再当场拒绝**：攒下来按顺序配对（第 k 个元素 ↔ 第 k 个区间），
+     * 配不拢才整组拒；**零次**仍然拒绝（那是 mermaid 自己算出来的，比如 pie 的百分比）。
      * 这一条兜底让 sequence / class / pie / gantt / journey / mindmap / timeline
      * 这些没专门写解析器的图也能改字，代价是不再区分「这是标签」还是「这是个数字」。
-     * 所以拒绝理由必须说清是哪一种（多次 = 有歧义；零次 = 被 mermaid 加工过，比如 pie 的百分比）。
+     * 所以拒绝理由必须说清是哪一种（配不拢 = 有歧义；零次 = 被 mermaid 加工过）。
      */
     const generic = findTextSpans(source, text);
     if (generic.length === 1) {
@@ -396,18 +426,30 @@ export function editableLabels(svg: SVGSVGElement, source: string): EditableLabe
       taken.add(box);
       continue;
     }
-    if (idSpans.some((s) => s.text === text)) {
-      out.push({
-        box,
-        hit: html,
-        target,
-        span: null,
-        reason: t("mermaid.identifierLocked"),
-      });
+    /*
+     * 159 片 2：双击**标识符本身**（ER 实体名、state 状态名）不再一口回绝。
+     * 老口径是「只改这一处会让图对不上」，那是对的结论、错的选择 —— 用户要的就是这两件事之一：
+     * 换个显示名（别名那条路）或连名字一起换（改名会覆盖所有引用位）。所以这里给得出 span，
+     * 界面上就摆两颗键；**认不出这个名字（图类型不认识 / 数不到标识符位）就照旧回绝**，不猜。
+     */
+    const idHit = idSpans.filter((s) => s.text === text);
+    if (idHit.length > 1) {
+      out.push({ box, hit: html, target, span: null, reason: t("mermaid.duplicateDefinition") });
+      continue;
+    }
+    if (idHit.length === 1) {
+      const rename = renameTargetOf(source, idHit[0]);
+      if (!rename) {
+        out.push({ box, hit: html, target, span: null, reason: t("mermaid.identifierLocked") });
+        continue;
+      }
+      out.push({ box, hit: html, target, span: idHit[0], viaOverlay, rename });
+      taken.add(box);
       continue;
     }
     if (generic.length > 1) {
-      out.push({ box, hit: html, target, span: null, reason: t("mermaid.ambiguousMatch") });
+      // 片 3：多次不再是"整组拒"，而是攒下来按顺序配对（配不拢才拒，见循环后那一段）
+      待定.push({ box, hit: html, target, viaOverlay, text, key: "gen|" + text, pool: generic });
     } else {
       // 屏幕上这行字在源码里一个字都找不到：多半是 mermaid 自己算出来的（饼图的百分比、
       // 甘特图的刻度）。这些**本来就不是用户写的**，改它没有意义，必须拒绝并说清为什么。
@@ -420,6 +462,35 @@ export function editableLabels(svg: SVGSVGElement, source: string): EditableLabe
       });
     }
   }
+  /*
+   * 159 片 3：把攒下的"同文多处"按顺序配对 —— 屏幕上第 k 个元素拿源码里第 k 个区间，
+   * 于是"双击第二处只改第二处"成立，而**配对本身要能自证**（数量相等 + 逐对文字相同，
+   * 见 `pairSpansByOrder`）：一旦 mermaid 换了渲染顺序，逐对文字就对不上，整组退回"不给改"，
+   * 绝不会把改动写到用户没点的那一处。
+   */
+  const 分组 = new Map<string, 待定项[]>();
+  for (const d of 待定) {
+    const g = 分组.get(d.key);
+    if (g) g.push(d);
+    else 分组.set(d.key, [d]);
+  }
+  for (const [, 组] of 分组) {
+    const 配 = pairSpansByOrder(组.map((d) => d.text), 组[0].pool);
+    组.forEach((d, i) => {
+      const span = 配[i];
+      if (!span) {
+        out.push({ box: d.box, hit: d.hit, target: d.target, span: null, reason: t("mermaid.ambiguousMatch") });
+        return;
+      }
+      out.push({ box: d.box, hit: d.hit, target: d.target, span, viaOverlay: d.viaOverlay });
+      taken.add(d.box);
+    });
+  }
+  /*
+   * 剩下那些「背后有没有标识符」在这里补算一次，别在各条分支里各写一遍 ——
+   * 159 的按钮摆几颗、点下去改什么，全靠这一处赋值；两处真相早晚会对不上。
+   */
+  for (const l of out) if (l.span && l.rename === undefined) l.rename = renameTargetOf(source, l.span);
   return out;
 }
 
@@ -658,6 +729,14 @@ export function codeBlockNodeView(
   /** 双击时锁定的区间，以及那一刻的源码原文（提交时核对源码没被别处动过） */
   let lastSpan: LabelSpan | null = null;
   let lastSourceText = "";
+  /**
+   * 159 片 2：这一处**背后的标识符**（null = 没有，界面上就只摆「只改显示」那一颗键）。
+   * 双击那一刻算好存住，提交时不再重算 —— 和 `lastSpan` 同一个理由：
+   * 用户已经在编辑区里动了字，按当下的源码重算会认错目标。
+   */
+  let lastTarget: RenameTarget | null = null;
+  /** 提交走哪条路：只改那一段显示文字（老路 / 别名路），还是连标识符一起改 */
+  type CommitMode = "display" | "rename";
 
   /**
    * 提交时找回要替换的源码区间。
@@ -685,6 +764,54 @@ export function codeBlockNodeView(
     }, ms);
   }
 
+  /* ---------------- 159 片 2：编辑态的那两颗键 ---------------- */
+
+  const 键栏 = document.createElement("div");
+  键栏.className = "hp-mermaid-actions";
+  键栏.dataset.testid = "pm-mermaid-actions";
+  // 键栏本身绝不能是 contenteditable 的一部分（109 那条老规矩：否则光标会跳进去打字）
+  键栏.contentEditable = "false";
+  const 只改显示键 = 建键("pm-mermaid-display", "display");
+  const 一起改名键 = 建键("pm-mermaid-rename", "rename");
+  键栏.append(只改显示键, 一起改名键);
+  /*
+   * `mousedown` 一定要挡住默认行为：编辑区**一失焦就提交**（125 定的口径，点别处也算提交），
+   * 而点任何一颗键必然先让编辑区失焦。不挡的话点「一起改名」会先按「只改显示」提交一次、
+   * 再改名一次 —— 两次写盘、撤销栈里两段，Ctrl+Z 一次退不回去。
+   */
+  键栏.addEventListener("mousedown", (e) => e.preventDefault());
+
+  function 建键(testid: string, mode: CommitMode): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hp-mermaid-actions__btn";
+    b.dataset.testid = testid;
+    b.addEventListener("click", () => {
+      if (editing) commitEdit(mode);
+      else if (overlay) commitOverlay(mode);
+    });
+    return b;
+  }
+
+  /** 摆在正在编辑的那段字下面；没有可改名字时**第二颗直接不摆** */
+  function 摆键栏(anchor: HTMLElement): void {
+    只改显示键.textContent = t("mermaid.displayOnly");
+    只改显示键.title = t("mermaid.displayOnlyHint");
+    一起改名键.textContent = lastTarget ? tf("mermaid.renameButton", { count: lastTarget.count }) : "";
+    一起改名键.title = t("mermaid.renameHint");
+    // 背后没有标识符时这颗**直接不摆**（灰着摆出来 = 请人去点一个必然被拒绝的键）
+    一起改名键.hidden = !lastTarget;
+    preview.append(键栏);
+    const r = anchor.getBoundingClientRect();
+    const base = preview.getBoundingClientRect();
+    键栏.style.left = Math.max(0, r.left - base.left) + "px";
+    键栏.style.top = Math.max(0, r.bottom - base.top + 4) + "px";
+  }
+
+  function 收键栏(): void {
+    if (键栏.isConnected) 键栏.remove();
+  }
+
   function stopEditing(box: HTMLElement): void {
     // **顺序不能反**：先把监听摘掉，再把 contenteditable 关掉。
     // 关掉 contenteditable 会**当场**触发 blur —— 如果 blur 还在，
@@ -695,15 +822,25 @@ export function codeBlockNodeView(
     box.contentEditable = "false";
     box.classList.remove("is-editing");
     editing = null;
+    收键栏();
   }
 
   /**
    * 把编辑结果写回源码。**内容可编辑的（HTML 标签）与覆盖输入框（SVG 文字）两条路共用这一份**，
    * 因为「能不能写、为什么不能写」跟用哪种控件编辑毫无关系 —— 分两份早晚写岔。
    *
+   * 三条落点按 `mode` 与「这一处背后是不是标识符」分派（159 片 2）：
+   * - `rename` → **连名字一起改**：所有标识符语法位一起换，标签正文里的同名一个字节不动；
+   * - `display` 且双击的就是标识符（ER 实体名、state 状态名）→ **改的是显示名**，
+   *   走别名那条路（`applyAliasSet`，就地改写、绝不追加第二份）；
+   * - `display` 其余 → 125 的老路 `applyLabelEdit`，只换那一段文字。
+   *
    * 三种结果：写成了 / 被拒（带具体理由）/ 什么都没改（不许把文档弄脏）。
    */
-  function writeBack(text: string): { state: "written" } | { state: "noop" } | { state: "rejected"; reason: string } {
+  function writeBack(
+    text: string,
+    mode: CommitMode = "display"
+  ): { state: "written" } | { state: "noop" } | { state: "rejected"; reason: string } {
     const pos = getPos();
     if (pos == null) return { state: "noop" };
     const targetNode = view.state.doc.nodeAt(pos);
@@ -714,25 +851,40 @@ export function codeBlockNodeView(
       // 双击到提交之间源码被别处改过（查找替换、手动编辑），位置不可信 —— 不动源码
       return { state: "rejected", reason: t("mermaid.sourceMoved") };
     }
-    const result = applyLabelEdit(source, span, text);
-    if (!result.ok) return { state: "rejected", reason: result.reason };
-    if (result.src === source) return { state: "noop" }; // 一个字都没改，别脏
+    const bare = text.replace(/^\s+|\s+$/g, "");
+    let next = "";
+    if (mode === "rename") {
+      // 这颗键只在 lastTarget 存在时才会被摆出来；走到这里还是 null = 上面的摆键逻辑错了，宁可什么都不写
+      if (!lastTarget) return { state: "noop" };
+      const r = applyIdentifierRename(source, lastTarget.id, bare);
+      if (!r.ok) return { state: "rejected", reason: r.reason };
+      next = r.src;
+    } else if (lastTarget?.self) {
+      const r = applyAliasSet(source, lastTarget.id, bare);
+      if (!r.ok) return { state: "rejected", reason: r.reason };
+      next = r.src;
+    } else {
+      const r = applyLabelEdit(source, span, text);
+      if (!r.ok) return { state: "rejected", reason: r.reason };
+      next = r.src;
+    }
+    if (next === source) return { state: "noop" }; // 一个字都没改，别脏
     // 整块代码内容一次替换：这是「结构操作」不是打字，
     // 打 hpStep 让它自成一步（Ctrl+Z 一次回到改字前，不会一个字一个字退）
     const tr = view.state.tr;
     // code_block 是 text 容器：内容区间 = [pos+1, pos+nodeSize-1]
-    tr.insertText(result.src, pos + 1, pos + targetNode.nodeSize - 1).setMeta(HP_STEP_META, true);
+    tr.insertText(next, pos + 1, pos + targetNode.nodeSize - 1).setMeta(HP_STEP_META, true);
     view.dispatch(tr.scrollIntoView());
     view.focus();
     return { state: "written" };
   }
 
-  function commitEdit(): void {
+  function commitEdit(mode: CommitMode = "display"): void {
     const box = editing;
     if (!box) return;
     const text = box.innerText;
     stopEditing(box);
-    const r = writeBack(text);
+    const r = writeBack(text, mode);
     // 没写成时把原来的渲染文字还回去 —— 屏幕上留着一个编辑了一半的空盒子最吓人
     if (r.state === "rejected") {
       box.innerHTML = editOriginalHtml;
@@ -776,14 +928,15 @@ export function codeBlockNodeView(
     overlay = null;
     input.removeEventListener("keydown", onOverlayKey);
     input.remove();
+    收键栏();
   }
 
-  function commitOverlay(): void {
+  function commitOverlay(mode: CommitMode = "display"): void {
     const input = overlay;
     if (!input) return;
     const text = input.value;
     closeOverlay();
-    const r = writeBack(text);
+    const r = writeBack(text, mode);
     if (r.state === "rejected") flashHint(r.reason);
   }
 
@@ -805,7 +958,7 @@ export function codeBlockNodeView(
    * 位置用两个 rect 的差算，尺寸沿用那段字自己的框，字号按渲染出来的高度折算
    * （SVG 会被 viewBox 缩放，直接拿 CSS 字号会一大一小）。
    */
-  function startOverlayEdit(anchor: Element, span: LabelSpan): void {
+  function startOverlayEdit(anchor: Element, seed: string): void {
     closeOverlay();
     const r = anchor.getBoundingClientRect();
     const base = preview.getBoundingClientRect();
@@ -813,7 +966,7 @@ export function codeBlockNodeView(
     input.type = "text";
     input.className = "hp-mermaid-edit";
     input.dataset.testid = "pm-mermaid-label-input";
-    input.value = span.text;
+    input.value = seed;
     input.spellcheck = false;
     input.style.left = Math.max(0, r.left - base.left - 4) + "px";
     input.style.top = Math.max(0, r.top - base.top - 2) + "px";
@@ -824,9 +977,10 @@ export function codeBlockNodeView(
     overlay = input;
     input.addEventListener("keydown", onOverlayKey);
     // 失焦即提交，与 contenteditable 那条路同一口径（125 点名的就是这条）
-    input.addEventListener("blur", commitOverlay);
+    input.addEventListener("blur", () => commitOverlay());
     input.focus();
     input.select();
+    摆键栏(input);
   }
 
   preview.addEventListener("dblclick", (e) => {
@@ -872,19 +1026,26 @@ export function codeBlockNodeView(
     if (editing) stopEditing(editing);
     lastSpan = hit.span;
     lastSourceText = block.textContent;
+    lastTarget = hit.rename ?? null;
+    /*
+     * 编辑区里摆哪段文字：**双击标识符时摆它的显示名**（`CUSTOMER["客户"]` → 客户），
+     * 其余摆源码里那段标签正文。把源码 token 整串交给用户改，落盘就会是
+     * 「别名语句里塞着一串带括号和引号的名字」。
+     */
+    const seed = lastTarget?.self ? aliasTextOf(hit.span, lastTarget.id) : hit.span.text;
     /*
      * 127：SVG 文字（sequence / pie / gantt / timeline）不能挂 contenteditable，
      * 盖一个输入框上去。清单里那位 `viaOverlay` 是**探针测出来的**，不是我猜的：
      * `contentEditable` 在 SVG 元素上连属性都不存在，focus 也进不去。
      */
     if (hit.viaOverlay) {
-      startOverlayEdit(hit.hit, hit.span);
+      startOverlayEdit(hit.hit, seed);
       return;
     }
     editOriginalHtml = hit.box.innerHTML;
     // 编辑的是**源码里那段文字**，不是屏幕上的渲染产物 ——
     // 渲染时我们为了折行插过 `<br/>`，拿渲染结果当编辑内容就会把它当成用户换行写回源码
-    hit.box.innerHTML = labelToEditableHtml(hit.span.text);
+    hit.box.innerHTML = labelToEditableHtml(seed);
     editing = hit.box;
     hit.box.contentEditable = "true";
     hit.box.spellcheck = false;
@@ -901,6 +1062,7 @@ export function codeBlockNodeView(
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(r);
+    摆键栏(hit.box);
   });
 
   /* ---------------- 145：Mermaid 块的源码默认收起（普通代码块不收） ---------------- */
@@ -923,81 +1085,51 @@ export function codeBlockNodeView(
     getPos,
   });
 
-  /* ---------------- 146-A：这一张图自己的缩放 ---------------- */
+  /* ---------------- 146-A / 161：这一张图自己的缩放 ---------------- */
   /*
-   * ：「mermaid 图新增支持单独缩放，缩放功能放编辑功能右侧」。
-   * 三颗键：`−` 倍率 `+`，点倍率回 100%。只作用在**渲染出来的那张图**上，
-   * 倍率存在视图侧的表里（键 = 标签页 + 该块源区间），**一个字节都不进文档** ——
-   * 缩放是"怎么看"，不是"文档里有什么"。
+   * ：「mermaid 图新增支持单独缩放，缩放功能放编辑功能右侧」；
+   * ：「阅读模式的 mermaid 加上缩放功能」—— 两档共用 `kernel/mermaidZoom.ts` 那一份表与那一组键，
+   * 这里只负责把它挂到功能栏上、并算出"这张图是谁"。
+   * 三颗键：`−` 倍率 `+`，点倍率回 100%；只作用在**渲染出来的那个图容器**上，
+   * **一个字节都不进文档** —— 缩放是"怎么看"，不是"文档里有什么"。
    */
-  const 缩放组 = document.createElement("span");
-  缩放组.className = "hp-codebox__zoom";
-  缩放组.dataset.testid = "pm-mermaid-zoom";
-  const 缩小 = document.createElement("button");
-  缩小.type = "button";
-  const 倍率 = document.createElement("button");
-  倍率.type = "button";
-  倍率.dataset.testid = "pm-mermaid-zoom-reset";
-  const 放大 = document.createElement("button");
-  放大.type = "button";
-  for (const [b, 文, 键] of [
-    [缩小, "−", "code.zoomOut"],
-    [放大, "+", "code.zoomIn"],
-  ] as const) {
-    b.textContent = 文;
-    b.dataset.testid = 键 === "code.zoomIn" ? "pm-mermaid-zoom-in" : "pm-mermaid-zoom-out";
-    b.title = t(键);
+  /** 这一张图是**文中第几张** Mermaid（文档顺序，0 起）；算不出来（块还没进文档）给 -1 */
+  function 图序号(): number {
+    const 我 = getPos();
+    if (我 == null) return -1;
+    let 数 = 0;
+    let 找到 = -1;
+    view.state.doc.descendants((n, p) => {
+      if (n.type.name !== "code_block") return true; // 列表项、表格单元里也藏着代码块，别停在段落上
+      if (current(n) !== "mermaid") return false;
+      if (p === 我) {
+        找到 = 数;
+        return false;
+      }
+      数++;
+      return false;
+    });
+    return 找到;
   }
-  倍率.title = t("code.zoomReset");
-  缩放组.append(缩小, 倍率, 放大);
-  bar.append(缩放组);
 
-  /** 当前倍率存在哪一格：没有源区间的块（刚粘贴进来的）不认，从 100% 起 */
-  const 缩放键 = (): string => {
-    const pos = getPos();
-    const n = pos == null ? null : view.state.doc.nodeAt(pos);
-    const 起 = n ? (n.attrs.srcFrom ?? null) : null;
-    const 止 = n ? (n.attrs.srcTo ?? null) : null;
-    return 起 == null ? "" : tabKey() + ":" + 起 + "-" + 止;
-  };
-  let 倍 = 1;
+  const 缩放 = 建缩放控件({
+    // 键每次现算：增删图之后序号变了，倍率就跟着新的位置走（口径见 mermaidZoom.ts 头上第 3 条）
+    键: () => 拼缩放键(tabKey(), 图序号()),
+    图: () => previewSvg,
+    testid: {
+      组: "pm-mermaid-zoom",
+      缩小: "pm-mermaid-zoom-out",
+      倍率: "pm-mermaid-zoom-reset",
+      放大: "pm-mermaid-zoom-in",
+    },
+  });
+  bar.append(缩放.dom);
 
+  /** 普通代码块不给这一组键（缩放的是图，不是文字）；倍率每次现读，换档 / 改过源码都对得上 */
   function 画缩放(): void {
-    缩放组.hidden = current(当前节点) !== "mermaid";
-    previewSvg.style.zoom = String(倍);
-    倍率.textContent = Math.round(倍 * 100) + "%";
-    缩小.disabled = 倍 <= 缩放档[0];
-    放大.disabled = 倍 >= 缩放档[缩放档.length - 1];
+    缩放.dom.hidden = current(当前节点) !== "mermaid";
+    缩放.刷新();
   }
-
-  /** 往某一侧走一档：跳过表里没有的值，取最近的那一档 */
-  function 调倍率(delta: 1 | -1): void {
-    const 目标 =
-      delta > 0
-        ? 缩放档.find((v) => v > 倍 + 1e-6)
-        : [...缩放档].reverse().find((v) => v < 倍 - 1e-6);
-    if (!目标 || 目标 === 倍) return;
-    倍 = 目标;
-    const k = 缩放键();
-    if (k) 图缩放.set(k, 倍);
-    画缩放();
-  }
-
-  缩小.addEventListener("click", (e) => {
-    e.preventDefault();
-    调倍率(-1);
-  });
-  放大.addEventListener("click", (e) => {
-    e.preventDefault();
-    调倍率(1);
-  });
-  倍率.addEventListener("click", (e) => {
-    e.preventDefault();
-    倍 = 1;
-    const k = 缩放键();
-    if (k) 图缩放.set(k, 1);
-    画缩放();
-  });
 
 
   function sync(n: PMNode) {
@@ -1017,9 +1149,7 @@ export function codeBlockNodeView(
       select.value = lang;
     }
     box.dataset.mermaid = lang === "mermaid" ? "1" : "0";
-    // 146-A：换档 / 换标签回来时认回这张图自己的倍率（键认不到就回 100%）
-    const k = 缩放键();
-    倍 = k && 图缩放.has(k) ? (图缩放.get(k) as number) : 1;
+    // 146-A / 161：换档、换标签、重绘回来时认回这张图自己的倍率（键认不到就回 100%）
     画缩放();
     scheduleRender(n);
     // 内容变了（删了几行、或从 30 行粘成 2 行）→ 折叠状态与按钮要跟着重判

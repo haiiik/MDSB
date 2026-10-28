@@ -52,8 +52,10 @@ Built from scratch, runs fully offline in a single executable.
 **Mermaid**
 
 - All common diagram types render; long CJK labels wrap before rendering, so nothing overflows and text stays sharp
+- Each diagram zooms on its own: `− 100% +` at the right end of the diagram's toolbar (click the percentage to go back to 100%). Reading and edit modes share the same control and the same level — and the level is purely how you look at it, never written into the file
 - Double-click text in a diagram to edit it — node labels, edge labels, ER attributes and relations, state transition descriptions. Enter or blur commits, Esc cancels, one undo reverts
-- When the text can't be traced back to a unique place in the source, the edit is refused with a reason instead of guessing a position
+- Double-clicking an entity or state **name** offers two actions: **change the label only** (writes an alias, leaving the name and its references untouched) or **rename in all N places** (the declaration plus every reference; the button states how many places move). When no name can be resolved only one action is offered — never a button that is guaranteed to be refused
+- When the same text appears several times in a diagram, editing still works: the k-th thing on screen changes the k-th place in the source and leaves the others byte-for-byte alone. If the two lists can't be matched (different counts, or the texts don't line up pair by pair) the whole group is refused with a reason — the position is never guessed
 
 **Paste**
 

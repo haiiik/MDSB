@@ -99,6 +99,9 @@
   .hp-codebox__hint,
   .hp-mermaidbox__hint,
   .hp-mermaid__bar,
+  /* 159 片 2：就地改字时那两颗键 / 覆盖输入框也不进纸（编辑态打进纸里没有任何意义） */
+  .hp-mermaid-actions,
+  .hp-mermaid-edit,
   .hp-dismiss,
   .hp-code__copy,
   .hp-toc__title,

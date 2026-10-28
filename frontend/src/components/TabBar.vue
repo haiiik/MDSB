@@ -2,6 +2,7 @@
 import { t as msg, tf } from "../i18n";
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import ThemeToggle from "./ThemeToggle.vue";
+import { 收纳浮窗锚点 } from "../kernel/tabPickerAnchor";
 import {
   activate,
   closeOtherTabs,
@@ -65,6 +66,8 @@ const stripW = ref(0);
 
 function measure(): void {
   if (strip.value) stripW.value = strip.value.clientWidth;
+  // 162：栏一变宽窄，那颗「+N」就挪一格；浮窗开着的话跟着挪
+  if (picker.value) 定位浮窗();
 }
 
 let ro: ResizeObserver | null = null;
@@ -98,6 +101,26 @@ const shown = computed(() => tabs.list.slice(window0.value, window0.value + capa
 const hidden = computed(() => tabs.list.filter((t) => !shown.value.includes(t)));
 
 const picker = ref(false);
+/**
+ * 162：浮窗贴着那颗「+N」开（要求：「窗口过多收纳展开放在展开按钮那里，而不是放在左边」）。
+ *
+ * 位置**每次展开算一次、栏宽一变再算一次** —— 那颗按钮长在标签串尾巴上，栏一拖宽拖窄它就挪地方
+ * （实测：溢出时标签正好把栏填满，所以**换活动标签并不挪它**，别把判据押在这上面）。
+ * 算一次定死的话，浮窗会跟按钮各去各的。
+ * 数交给 `kernel/tabPickerAnchor.ts` 那份纯函数算（单位层与 E2E/桌面钉的是同一个答案）。
+ */
+const moreBtn = ref<HTMLElement | null>(null);
+const 浮窗位 = reactive({ top: 36, right: 8 });
+function 定位浮窗(): void {
+  const 矩 = moreBtn.value?.getBoundingClientRect() ?? null;
+  const 锚 = 收纳浮窗锚点(矩, { width: window.innerWidth, height: window.innerHeight });
+  // null = 这一帧按钮不在（`v-if` 掉了）。保持上一次的位置，不许跳回左上
+  if (锚) Object.assign(浮窗位, 锚);
+}
+function togglePicker(): void {
+  picker.value = !picker.value;
+  if (picker.value) 定位浮窗();
+}
 function pick(id: string): void {
   activate(id);
   picker.value = false;
@@ -181,8 +204,9 @@ function onDrop(to: number) {
         ×
       </button>
     </div>
-    <!-- 140：装不下的收进这颗，点开创浮窗挑（页签区不出现滚动条） -->
+    <!-- 140：装不下的收进这颗，点开创浮窗挑（页签区不出现滚动条）；162：浮窗就开在这颗下面 -->
     <button
+      ref="moreBtn"
       v-if="hidden.length"
       class="tabbar__more"
       :class="{ 'is-on': picker }"
@@ -190,7 +214,7 @@ function onDrop(to: number) {
       :aria-label="tf('tab.moreHint', { n: hidden.length })"
       :aria-expanded="picker ? 'true' : 'false'"
       data-testid="tab-more"
-      @click="picker = !picker"
+      @click="togglePicker"
     >+{{ hidden.length }}</button>
     <!--
  127：这颗「+」**不再是打开文件**，按已定口径改成「新增标签」——
@@ -256,9 +280,15 @@ function onDrop(to: number) {
     <ThemeToggle />
   </div>
 
-  <!-- 收纳浮窗：列**全部**标签（只列收起的那几颗的话，用户看不出自己在哪里） -->
+  <!-- 收纳浮窗：列**全部**标签（只列收起的那几颗的话，用户看不出自己在哪里）；
+       位置贴在「+N」那颗下面（162），由 `定位浮窗()` 每次展开与栏宽变化时重算 -->
   <div v-if="picker" class="menu-mask" data-testid="tab-picker-mask" @click="picker = false">
-    <ul class="menu tabpicker" data-testid="tab-picker" @click.stop>
+    <ul
+      class="menu tabpicker"
+      data-testid="tab-picker"
+      :style="{ top: 浮窗位.top + 'px', right: 浮窗位.right + 'px' }"
+      @click.stop
+    >
       <li class="tabpicker__head">{{ msg("tab.pickerTitle") }}</li>
       <li
         v-for="t in tabs.list"
@@ -343,10 +373,17 @@ function onDrop(to: number) {
   color: var(--hp-accent);
 }
 
+/*
+ * 162（要求：「窗口过多收纳展开放在展开按钮那里，而不是放在左边」）：
+ * 原来这里写死 `top: 36px; left: 18px`（照「首个标签左边界 = 收起后窄边右边界」那条对齐线放的），
+ * 而那颗「+N」长在标签串尾巴上 —— 结果按钮在右、列表在左，中间隔着整栏标签。
+ * 现在 `top` / `right` 由 `定位浮窗()` 算出来挂到元素上（右缘与按钮右缘齐平，两头夹住不出界），
+ * 这里只留形状与滚动。`max-width` 是那道夹的兜底：窗口再窄也不捅出左右边界。
+ */
 .tabpicker {
-  position: fixed;
   top: 36px;
-  left: 18px;
+  right: 8px;
+  max-width: calc(100vw - 16px);
   max-height: min(60vh, 420px);
   overflow-y: auto;
   min-width: 240px;

@@ -4,8 +4,9 @@ import { freshSession, gotoApp, setMode } from "./mockApp";
 /**
  * 127：Mermaid 双击改字**不再只限 flowchart / ER / 状态图**。
  *
- * 做法换成「从渲染产物倒查源码」：屏幕上这行字，在源码里**只出现一次**才给改，
- * 出现多次或有歧义就拒绝并说明原因（认错会把用户的图改坏）。
+ * 做法换成「从渲染产物倒查源码」：屏幕上这行字，在源码里能**唯一对上**就给它改；
+ * 出现多次时按顺序配对（159 片 3），配不拢（数量不等 / 逐对文字不同）才拒绝并说明原因
+ * —— 认错会把用户的图改坏，比改不动严重得多。
  * 这条路的代价是不用再为每种图写一个解析器，好处是 mermaid 加图类型我们不跟着改。
  *
  * SVG `<text>` 那类（sequence / pie / gantt / timeline）不能挂 contenteditable
@@ -188,12 +189,17 @@ test("journey / mindmap / timeline：三种新图也认得出唯一出处", asyn
   }
 });
 
-test("源码里出现多次的同一行字：标成不能改，双击给得出理由", async ({ page }) => {
+/*
+ * 159 片 3 改了这条的口径：同一段文字出现多次**不再整组拒绝**，
+ * 而是"屏幕上第 k 个 ↔ 源码里第 k 个"按顺序配对，两处都能改、各改各的那一处。
+ * 配对本身要自证（数量相等 + 逐对文字相同），配不拢仍走"有歧义，不给改"。
+ * 正反两个方向各钉一条见 `edit-mermaid-rename-159.spec.ts`（改第二处 / 改第一处）。
+ */
+test("源码里出现多次的同一行字：两处都标成可改（159 片 3 改了口径）", async ({ page }) => {
   const preview = await openDiagram(
     page,
     "sequenceDiagram\n  participant 甲\n  participant 乙\n  甲->>乙: 重复\n  乙->>甲: 重复\n"
   );
-  const 重复 = preview.locator('[data-hp-label="no"]', { hasText: "重复" }).first();
-  await expect(重复).toHaveAttribute("data-hp-label", "no");
-  expect(await 重复.getAttribute("title")).toContain("出现多次");
+  await expect(preview.locator('[data-hp-label="1"]', { hasText: "重复" })).toHaveCount(2);
+  expect(await preview.locator('[data-hp-label="no"]', { hasText: "重复" }).count()).toBe(0);
 });

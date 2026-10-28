@@ -735,6 +735,15 @@ html[data-theme="dark"] .hp-callout--caution {
   margin-left: 6px;
 }
 
+/*
+ * 161：阅读档那条栏里只有这一组键，靠右摆 —— 与编辑档"缩放键在功能栏右端"（146-A 点名的位置）对齐。
+ * 栏的**高度**不由这里决定：它钉的是 `min-height: var(--hp-codebar-h)`（149-C 同源那条），
+ * 键本身 ~22px 高，塞进去不会把栏顶起来，所以两档整块等高不会因为加了这组键而破。
+ */
+.hp-doc .hp-mermaid__bar .hp-codebox__zoom {
+  margin-left: auto;
+}
+
 .hp-doc .hp-codebox__zoom button {
   min-width: 22px;
   padding: 1px 5px;
@@ -789,6 +798,38 @@ html[data-theme="dark"] .hp-callout--caution {
   color: var(--hp-text-weak);
   font-size: 0.78em;
   text-align: left;
+}
+
+/*
+ * 159 片 2：编辑态下挂在那段字下面的两颗键（「只改显示」+「一起改名 N 处」）。
+ * 位置与尺寸由脚本按 rect 写进行内样式，这里只管外观。
+ * **背后没有标识符时那颗直接不摆**（`hidden`），所以这里不写"灰键"的样子 ——
+ * 灰着一颗点下去必然被拒绝的键，比不给这颗键更坏。
+ */
+.hp-doc .hp-mermaid-actions {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  gap: 6px;
+}
+
+.hp-doc .hp-mermaid-actions__btn {
+  padding: 2px 8px;
+  border: 1px solid var(--hp-border);
+  border-radius: 4px;
+  background: var(--hp-bg);
+  color: var(--hp-text);
+  font-family: var(--hp-font-md);
+  font-size: 0.78em;
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 8px var(--hp-shadow);
+}
+
+.hp-doc .hp-mermaid-actions__btn:hover {
+  border-color: var(--hp-accent);
+  color: var(--hp-accent);
 }
 
 .hp-doc .hp-mermaidbox[data-state="pending"] .hp-mermaidbox__svg {

@@ -769,13 +769,13 @@ export function createTextMeasurer(font: string): (s: string) => number {
  */
 
 /** 合法标识符（改名与别名共用）：字母 / 数字 / 下划线 / 汉字，不含空格与定界符。**汉字区间用 \u 写** */
-const RENAMEABLE_ID = /^[A-Za-z0-9_一-鿿][A-Za-z0-9_一-鿿]*$/;
+const RENAMEABLE_ID = /^[A-Za-z0-9_\u4e00-\u9fff][A-Za-z0-9_\u4e00-\u9fff]*$/;
 
 /**
  * 扫描时「一个标识符」的字符集。**刻意不含 `-`**：`A-->B` 里减号是箭头的一部分，
  * 含进来会把 `A--` 当一个名字，等于每行都认错。
  */
-const ID_RUN = /[A-Za-z0-9_一-鿿]+/g;
+const ID_RUN = /[A-Za-z0-9_\u4e00-\u9fff]+/g;
 
 export type RenameKind = "flowchart" | "er" | "state" | "sequence" | "none";
 
@@ -1040,4 +1040,115 @@ export function applyAliasSet(src: string, id: string, display: string): AliasRe
   const indent = /^(\s*)/.exec(next)?.[1] || "  ";
   lines.splice(head + 1, 0, spec.make(indent, next));
   return { ok: true, src: lines.join("\n"), created: true };
+}
+
+/* ------------------------------------------- 159 片 2：这一处背后有没有标识符 */
+
+/** 「一起改名」那颗键要改的东西 */
+export interface RenameTarget {
+  /** 要改的名字（标识符，不是显示文字） */
+  id: string;
+  /** 这个名字作为标识符出现在几处 —— 按钮文案把它写出来，点之前就知道动多大范围 */
+  count: number;
+  /**
+   * `true` = 双击的那段字**本身就是**标识符（ER 实体头、state 状态名）。
+   * 这时「只改显示」不能把标识符换成一段带空格的文字（那是改名，而且是非法改名），
+   * 得走别名那条路 `applyAliasSet`；`false` = 双击的是标签文字，名字在别处，
+   * 「只改显示」照 125 的老路 `applyLabelEdit` 只换那一段。
+   */
+  self: boolean;
+}
+
+/** token 开头那段合法标识符：`CUSTOMER["客户"]` → `CUSTOMER`（**字符区间用 \u 写**，见 139 那条教训） */
+const ID_HEAD = /^[A-Za-z0-9_\u4e00-\u9fff]+/;
+
+function headIdentifier(token: string): string {
+  return ID_HEAD.exec(token)?.[0] ?? "";
+}
+
+/** 某个绝对下标所在的那一行（去缩进、去行尾空白） */
+function lineAt(src: string, at: number): string {
+  const from = src.lastIndexOf("\n", Math.max(0, at - 1)) + 1;
+  let to = src.indexOf("\n", from);
+  if (to < 0) to = src.length;
+  return src.slice(from, to).trim();
+}
+
+/**
+ * 这段**文字**所在那一行背后的标识符 —— 只有两种形状算"有"：
+ * `state "描述" as S2`（描述是显示名，名字是 S2）、
+ * `participant A as 显示名` / `actor A as 显示名`（同上）。
+ * 迁移标签、边标签、note 正文、ER 属性行都落不进这两种形状 → 返回空串，界面只给一颗键。
+ */
+function owningIdentifierOfLine(src: string, span: LabelSpan): string {
+  const line = lineAt(src, span.from);
+  const stateAs = /^state\s+("[^"]*"|'[^']*')\s+as\s+(\S+)\s*$/i.exec(line);
+  if (stateAs) return stateAs[2];
+  const partAs = /^(?:participant|actor)\s+(\S+)\s+as\s+\S+\s*$/i.exec(line);
+  if (partAs) return partAs[1];
+  return "";
+}
+
+/**
+ * 双击这一处，能不能"连名字一起改"。
+ *
+ * 三条口径（界面摆几颗键、点下去改什么，全看这张表）：
+ * ① **图类型不认识就 null** —— 别摆一颗点下去必然被拒绝的键；
+ * ② **认不出名字也 null**：`edge#3`、`attr-name`、`text#0` 这类定位键不是标识符，
+ *    `!RENAMEABLE_ID.test(id)` 一道就挡住了；
+ * ③ **名字在源码里数不到标识符位就 null**（`count === 0`）——
+ *    按钮上的处数必须是真处数，不能点了才发现"源码里没找到这个名字"。
+ */
+export function renameTargetOf(src: string, span: LabelSpan): RenameTarget | null {
+  if (renameKindOf(src) === "none") return null;
+  let id = "";
+  let self = false;
+  if (span.kind === "id") {
+    id = headIdentifier(span.text);
+    self = true;
+  } else if (span.kind === "node") {
+    id = span.id;
+  } else if (span.kind === "text") {
+    id = owningIdentifierOfLine(src, span);
+  }
+  if (!id || !RENAMEABLE_ID.test(id)) return null;
+  const count = scanIdentifierOccurrences(src, id).length;
+  if (count === 0) return null;
+  return { id, count, self };
+}
+
+/**
+ * 双击**标识符**时，编辑区里该摆哪段文字。
+ *
+ * 屏幕上那个方框里的字可能就是名字本身（`S2`），也可能是别名（`CUSTOMER["客户"]` 渲成「客户」）。
+ * 「只改显示」编辑的是**显示名**，所以带别名时必须把别名剥出来当编辑内容 ——
+ * 直接把 `CUSTOMER["客户"]` 整串交给用户改，落盘就是别名语句里塞着一串带括号的名字。
+ * 没有别名时返回原文（就是名字本身），用户输入的新文字会被当成第一个显示名。
+ */
+export function aliasTextOf(span: LabelSpan, id: string): string {
+  const rest = span.text.slice(id.length).trim();
+  if (!rest.startsWith("[") || !rest.endsWith("]") || rest.length < 2) return span.text;
+  const inner = rest.slice(1, -1).trim();
+  const q = inner[0];
+  if ((q === '"' || q === "'") && inner.length >= 2 && inner[inner.length - 1] === q) return inner.slice(1, -1);
+  return inner;
+}
+
+/**
+ * 159 片 3：**同一段文字出现在多处**时，把「屏幕上第 k 个元素」对上「源码里第 k 个区间」。
+ *
+ * 127 的旧口径是"多次就全拒"，代价是两条一模一样的消息根本改不动。
+ * 这里改成按顺序配对，但**配对结果要自己经得起核对**：
+ * ① 数量必须相等（多一个少一个都说明渲染顺序与源码顺序对不上，或者有的被 mermaid 吃了）；
+ * ② **逐对文字必须相同** —— 这一条是防"顺序被打乱"的：mermaid 哪天换了渲染顺序，
+ *    第 1 个元素对上第 2 个区间，`texts[i] !== spans[i].text` 当场就散，整组退回"不给改"。
+ * 任何一条不满足就返回全 null（宁可少认，不可错认 —— 认错会把用户别处的那段字改掉）。
+ *
+ * 两个列表都必须是**各自的正序**：`elements` 按 `querySelectorAll` 的文档顺序，
+ * `spans` 来自逐行扫描的源码顺序。
+ */
+export function pairSpansByOrder(texts: string[], spans: LabelSpan[]): (LabelSpan | null)[] {
+  if (texts.length === 0 || texts.length !== spans.length) return texts.map(() => null);
+  if (!texts.every((t, i) => spans[i].text === t)) return texts.map(() => null);
+  return spans;
 }
