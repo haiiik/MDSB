@@ -208,6 +208,26 @@ ${LONG_CODE}
 const mockFs = makeMockFs();
 
 /**
+ * 164：**每个路径各自的最后写入时刻**。
+ *
+ * 原来 `stat` 对所有文件都回同一个 `now`（建宿主那一刻的毫秒），于是 mock 里
+ * "文件被改过"这件事只有 size 变化能看出来 —— 而 164 的判据要钉的正是
+ * 「别的工具把同样长度的内容改了几个字」这一类。所以这里按路径记 mtime：
+ * 谁写（应用保存 / 测试用 `__hpMockSeedFile` 从外头塞）谁打点，`stat` 读它。
+ * 没打点过的（内置示例文档）退回建宿主那一刻。
+ */
+const mockMt = new Map<string, number>();
+
+/**
+ * 谁写谁打点。**严格递增**（同一毫秒内连着写两次也要让 mtime 挪一格）：
+ * 真实文件系统有 1 秒~100 纳秒不等的粒度，测试里如果两次写落在同一毫秒，
+ * 「外部改过」就判不出来 —— 那种判据会绿得让人误会自己写对了。
+ */
+function markWritten(p: string): void {
+  mockMt.set(p, Math.max(Date.now(), (mockMt.get(p) ?? 0) + 1));
+}
+
+/**
  * 116：mock 宿主的「二进制文件表」。
  *
  * 单独一张表而不是往 `files` 里塞字符串：图片的字节是判据的一部分
@@ -285,6 +305,7 @@ export function createBrowserMockHost(): HostBase {
       const fail = (window as unknown as { __hpMockFailWrites?: string }).__hpMockFailWrites;
       if (fail) throw new Error(fail);
       files.set(path, content);
+      markWritten(path);
     },
 
     async writeFileBytes(path: string, data: Uint8Array): Promise<boolean> {
@@ -305,7 +326,7 @@ export function createBrowserMockHost(): HostBase {
         path,
         name: path.split("/").pop() ?? path,
         size: content.length,
-        mtime: now,
+        mtime: mockMt.get(path) ?? now,
         isDir: false,
       };
     },
@@ -490,10 +511,23 @@ export function createBrowserMockHost(): HostBase {
     c: string
   ) => {
     files.set(p, c);
+    // 164：这条钩子模拟的就是「别的工具改了这份文件」—— mtime 必须跟着动，
+    // 否则"外部改了几个字但长度没变"这一类判据在 mock 里根本测不出来
+    markWritten(p);
   };
 
   /** 测试自检用：某个路径此刻是否真的在 mock 文件系统里 */
   (window as unknown as { __hpMockHas?: (p: string) => boolean }).__hpMockHas = (p: string) => files.has(p);
+
+  /**
+   * 164：测试用「外部把这份文件删了 / 改名了」。
+   * 真实桌面上这是 `os.Rename` 之后的 stat 抛错；mock 里只能把条目从表里摘掉，
+   * 让 `readFile` / `stat` 走"读不到"那一支 —— 不这么做，那条判据只能靠猜。
+   */
+  (window as unknown as { __hpMockDropFile?: (p: string) => void }).__hpMockDropFile = (p: string) => {
+    files.delete(p);
+    markWritten(p);
+  };
 
   /**
    * 测试用：读回 mock 文件系统里的**已落盘内容**。

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { t as msg, tf } from "../i18n";
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ThemeToggle from "./ThemeToggle.vue";
-import { 收纳浮窗锚点 } from "../kernel/tabPickerAnchor";
+import { 收纳浮窗锚点, 标签浮层锚点 } from "../kernel/tabPickerAnchor";
 import {
   activate,
   closeOtherTabs,
@@ -121,6 +121,59 @@ function togglePicker(): void {
   picker.value = !picker.value;
   if (picker.value) 定位浮窗();
 }
+
+/*
+ * 163（要求：「标签栏标签新增鼠标移入静置 1 秒鼠标浮窗显示文件全名」）。
+ *
+ * 三条口径抄 127 那条跑马灯的作业（同一个"悬停满 1 秒才动"的形状，踩过的坑不用再踩一遍）：
+ * - **只对真的被截断的那一颗弹**（`scrollWidth > clientWidth`）：全名本来就看得见时，
+ *   再盖一小条浮层是噪音；
+ * - **到点这一刻再认一次指针还在不在这一颗上**：`mouseleave` 会清定时器，但标签列表重渲染时
+ *   leave/enter 不一定成对，延时的尾巴会在鼠标早就离开之后才落下；
+ * - 浮层 `pointer-events: none`，不然鼠标追到浮层上会把浮层自己顶掉，读不完又弹回来。
+ *
+ * 内容按要求**只有文件全名**（不写路径 —— 路径在右键菜单「复制路径」那颗上，入口不重复）。
+ * 不用原生 `title`：那条浮层由系统画、不跟主题（深色档会顶出一块浅色），延时也捏不到 1 秒。
+ */
+const 全名浮层 = reactive({ 开: false, 文: "", top: 36, left: 8 });
+let 浮层计时: ReturnType<typeof setTimeout> | null = null;
+
+function 收起浮层(): void {
+  if (浮层计时) {
+    clearTimeout(浮层计时);
+    浮层计时 = null;
+  }
+  全名浮层.开 = false;
+}
+
+function 悬停标签(e: MouseEvent, 名: string): void {
+  const 颗 = e.currentTarget as HTMLElement | null;
+  if (浮层计时) clearTimeout(浮层计时);
+  浮层计时 = setTimeout(() => {
+    浮层计时 = null;
+    if (!颗 || !颗.isConnected || !颗.matches(":hover")) return;
+    const 字 = 颗.querySelector<HTMLElement>(".tab__name");
+    if (!字) return;
+    const 溢出 = 字.scrollWidth - 字.clientWidth;
+    if (溢出 <= 1) return; // 名字本来就看得全，别弹
+    const 锚 = 标签浮层锚点(
+      颗.getBoundingClientRect(),
+      { width: window.innerWidth, height: window.innerHeight },
+      // 浮层宽 = 整串名字那一行的实际宽（含左右内边距），夹右边界要用它
+      Math.ceil(字.scrollWidth) + 20
+    );
+    if (!锚) return;
+    全名浮层.文 = 名;
+    全名浮层.top = 锚.top;
+    全名浮层.left = 锚.left;
+    全名浮层.开 = true;
+  }, 1000);
+}
+
+watch(() => [tabs.activeId, tabs.list.length] as const, 收起浮层);
+onBeforeUnmount(() => {
+  if (浮层计时) clearTimeout(浮层计时);
+});
 function pick(id: string): void {
   activate(id);
   picker.value = false;
@@ -190,6 +243,8 @@ function onDrop(to: number) {
       :class="{ 'is-active': t.id === tabs.activeId, 'is-over': drag.over === window0 + i }"
       :draggable="true"
       @click="activate(t.id)"
+      @mouseenter="悬停标签($event, t.name)"
+      @mouseleave="收起浮层()"
       @mousedown.middle="onMiddle($event, t.id)"
       @dblclick="emit('close', t.id)"
       @contextmenu="onContext($event, t.id)"
@@ -279,6 +334,15 @@ function onDrop(to: number) {
     <!-- 127：主题开关（从设置里挪出来，就在齿轮右手边；右缘与顶栏关闭按钮对齐） -->
     <ThemeToggle />
   </div>
+
+  <!-- 163：悬停静置 1 秒后弹的那一小条 —— 只在这颗标签的名字被截断时才出现，内容只有文件全名 -->
+  <div
+    v-if="全名浮层.开"
+    class="tabtip"
+    data-testid="tab-tip"
+    role="tooltip"
+    :style="{ top: 全名浮层.top + 'px', left: 全名浮层.left + 'px' }"
+  >{{ 全名浮层.文 }}</div>
 
   <!-- 收纳浮窗：列**全部**标签（只列收起的那几颗的话，用户看不出自己在哪里）；
        位置贴在「+N」那颗下面（162），由 `定位浮窗()` 每次展开与栏宽变化时重算 -->
@@ -420,6 +484,30 @@ function onDrop(to: number) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * 163：悬停 1 秒后那一小条全名。
+ * - `pointer-events: none`：鼠标追上去会把浮层顶掉又弹回来，读不完；
+ * - 颜色一律走令牌（深浅两档都跟着主题）—— 原生 `title` 由系统画，深色档会顶出一块浅色；
+ * - `max-width` 兜底：窗口很窄时浮层自己收窄 + 省略号，不许横着捅出窗口。
+ */
+.tabtip {
+  position: fixed;
+  z-index: 45;
+  max-width: min(60vw, 520px);
+  padding: 4px 9px;
+  border: 1px solid var(--hp-border);
+  border-radius: 5px;
+  background: var(--hp-surface);
+  color: var(--hp-text);
+  box-shadow: 0 4px 14px var(--hp-shadow);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 .tab {

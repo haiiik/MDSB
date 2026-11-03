@@ -212,6 +212,13 @@ const en: Record<MsgKey, string> = {
   "tab.close": "Close",
   "tab.moreHint": "{n} more tabs don't fit \u2014 click to pick one",
   "tab.pickerTitle": "All tabs",
+
+  "ext.changed": "This file was changed on disk",
+  "ext.reload": "Reload from disk",
+  "ext.keep": "Keep my edits",
+  "ext.gone": "This file can no longer be read from disk (deleted or renamed)",
+  "ext.ok": "Got it",
+  "ext.reloaded": "Reloaded from disk",
   "footnotes.title": "Footnotes",
   "footnotes.backTo": "Back to reference {n}",
   "math.errorTip": "Formula not rendered (syntax error): ",

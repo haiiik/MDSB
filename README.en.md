@@ -27,6 +27,10 @@ Built from scratch, runs fully offline in a single executable.
 **Reading**
 
 - Multiple tabs, three modes: Reading / Editing / Source
+- Hover a truncated tab for a second and the full file name pops up
+- When another tool edits the file, MDStar keeps up: it reloads silently if you changed nothing,
+  and only asks when you have unsaved edits ("Reload from disk" / "Keep my edits") — it never
+  overwrites work you haven't saved
 - Sidebar with recent files and an outline; navigation jumps by heading index, so duplicate headings still land in the right place
 - Document zoom (`Ctrl` + wheel) and four content widths
 - Light and dark themes

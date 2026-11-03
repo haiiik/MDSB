@@ -143,6 +143,14 @@ const zh = {
   "tab.moreHint": "还有 {n} 个标签没放下，点开展开选择",
   "tab.pickerTitle": "全部标签",
 
+  // 164：外部工具改了这一篇（脏的时候只问一声，谁也不许悄悄盖掉谁）
+  "ext.changed": "磁盘上的这一份被改动了",
+  "ext.reload": "重载磁盘版本",
+  "ext.keep": "保留我的编辑",
+  "ext.gone": "这一篇在磁盘上读不到了（被删除或改了名）",
+  "ext.ok": "知道了",
+  "ext.reloaded": "已重载磁盘上的版本",
+
   "status.width": "宽度",
   "status.width.narrow": "窄",
   "status.width.normal": "标准",

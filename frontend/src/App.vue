@@ -22,6 +22,14 @@ import { closeSearch, openSearch, search as searchState } from "./state/search";
 import { settingsOpen } from "./state/settings";
 import { outputNotice, printDoc } from "./state/output";
 import { autoSaveError } from "./state/autosave";
+import {
+  startFileWatch,
+  stopFileWatch,
+  外部改动,
+  关掉提示,
+  保留我的编辑,
+  重载磁盘版本,
+} from "./state/fileWatch";
 import { scanRecoverable, clearSnapshotFor } from "./state/snapshot";
 import { restoreSession, saveSession } from "./state/session";
 import { wirePersistence } from "./state/persistence";
@@ -273,6 +281,9 @@ onMounted(async () => {
     };
     window.addEventListener("beforeunload", beforeUnloadHandler);
 
+    // 164：盯磁盘上这一篇有没有被别的工具改过（会话与转交都排完了才开，免得刚开就自己惊动自己）
+    startFileWatch();
+
     signalReady();
     (window as unknown as { __hpPerf?: typeof perf }).__hpPerf = perf;
   } catch (e) {
@@ -290,6 +301,7 @@ onBeforeUnmount(() => {
   if (beforeUnloadHandler) window.removeEventListener("beforeunload", beforeUnloadHandler);
   offCloseRequest?.();
   offStartupSignal?.();
+  stopFileWatch();
 });
 
 defineExpose({ confirmQuit, requestCloseTab, offerRecovery });
@@ -318,6 +330,36 @@ defineExpose({ confirmQuit, requestCloseTab, offerRecovery });
     -->
     <div v-if="outputNotice" class="toast" data-testid="output-notice" role="status">
       {{ outputNotice }}
+    </div>
+    <!--
+      164（要求：「新增文件自动刷新功能，应对其他工具改了文件」）。
+      没有未保存编辑时是**静默重载**，只有那一句回声；有未保存编辑时才摆这一条，
+      两颗键谁也不替谁做决定 —— 拿磁盘版本盖掉没保存的东西是这颗功能唯一不能被原谅的失败。
+      不点就一直留着（这是一次要人拍板的事，不是会自己过去提示）。
+    -->
+    <div v-if="外部改动.种类 === '改了'" class="extbar" data-testid="ext-notice" role="alert">
+      <span class="extbar__text">{{ msg("ext.changed") }}</span>
+      <button class="extbar__btn" data-testid="ext-reload" @click="重载磁盘版本()">
+        {{ msg("ext.reload") }}
+      </button>
+      <button class="extbar__btn" data-testid="ext-keep" @click="保留我的编辑()">
+        {{ msg("ext.keep") }}
+      </button>
+    </div>
+    <div v-else-if="外部改动.种类 === '没了'" class="extbar extbar--gone" data-testid="ext-notice" role="alert">
+      <span class="extbar__text">{{ msg("ext.gone") }}</span>
+      <button class="extbar__btn" data-testid="ext-ok" @click="关掉提示()">
+        {{ msg("ext.ok") }}
+      </button>
+    </div>
+    <div
+      v-if="外部改动.回声"
+      class="toast"
+      :class="{ 'toast--above': !!outputNotice }"
+      data-testid="ext-echo"
+      role="status"
+    >
+      {{ 外部改动.回声 }}
     </div>
     <!-- 130：这里只报「MDStar v版本」；宿主与平台（wails · windows）不再出现在界面上 -->
     <SettingsDialog :version="info?.version ?? ''" />
@@ -383,5 +425,61 @@ defineExpose({ confirmQuit, requestCloseTab, offerRecovery });
   font-size: 12.5px;
   text-align: center;
   transform: translateX(-50%);
+}
+
+/* 164：回声与输出的胶囊同格，两条都在时把回声往上抬一格，别叠成一坨读不了 */
+.toast--above {
+  bottom: calc(var(--hp-statusbar-h) + 48px);
+}
+
+/*
+ * 164：外部改动的提示条。放在底栏上方那一格（与输出回声同一带），
+ * 不挡正文最后一行、也不像对话框那样打断打字 —— 它要的是"看见了自己决定"，不是"必须先答我"。
+ */
+.extbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--hp-statusbar-h) + 12px);
+  z-index: 71;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(640px, 92vw);
+  padding: 8px 12px;
+  border: 1px solid var(--hp-border);
+  border-radius: 8px;
+  background: var(--hp-surface);
+  color: var(--hp-text);
+  box-shadow: 0 6px 20px var(--hp-shadow);
+  font-size: 12.5px;
+  transform: translateX(-50%);
+}
+
+.extbar__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extbar__btn {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border: 1px solid var(--hp-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--hp-accent);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.extbar__btn:hover {
+  border-color: var(--hp-accent);
+  background: var(--hp-hover);
+}
+
+.extbar--gone .extbar__btn {
+  color: var(--hp-text);
 }
 </style>
